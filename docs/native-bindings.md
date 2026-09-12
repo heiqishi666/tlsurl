@@ -51,14 +51,20 @@ Linux 必须在 manylinux_2_28 容器中运行，不能直接将新版 Ubuntu �
 macOS 拟定最低 11.0，须以目标平台验证结果为准。
 Cargo.lock 和 npm package-lock.json 随仓库提交，构建使用锁文件。
 
-工件位于 `dist/wheels` 与 `dist/npm`。开发阶段的主 npm tarball包含当前平台二进制，同时生成独立平台 tarball；正式统一主包及 optionalDependencies 聚合发布仍待实现，不能把任一单平台主包当作全平台正式包上传。
+工件位于 `dist/wheels` 与 `dist/npm`。主 npm tarball 只包含加载器、类型声明和许可证，通过固定版本的 optionalDependencies 引用五个平台包；各平台包单独携带原生二进制。发行 manifest 在打包暂存目录中生成，开发环境安装不会尝试下载尚未发布的平台包。
+
+工作流汇总五个平台的输出，检查主包内容一致、平台包齐全、版本一致、二进制存在以及 wheel 不重复，再生成 `native-release` 工件和 `SHA256SUMS`。这个工件包含五个 wheel、五个平台 npm tarball 和一个 npm 主包。
 
 ## 验证与发布边界
 
 Native packages 工作流覆盖 Linux x64/ARM64、Windows x64、macOS Intel/ARM64。
 每个作业构建、安装 wheel 和 npm tarball，再运行同一组协议测试；当前测试运行时为 CPython 3.13、Node 24。
 `abi3-py310` 是编译目标，不等于 Python 3.10～3.14 全版本验收已经完成。
-后续补充 Python 版本矩阵、Node 22、各平台无编译器隔离安装与动态库审计后再正式发布。
+兼容性作业复用上述工件，在五个平台分别安装 CPython 3.10、3.11、3.12、3.13、3.14，每组再用 Node 22 和 24 验证安装与调用，共 25 个作业、50 组运行时组合。这里指常规 GIL 版 CPython，不包括 free-threaded Python、PyPy 或未列出的系统架构。
+
+测试使用独立本地 registry 和空 npm 缓存安装主包，提供全部五个平台包，断言只安装一个匹配的平台包，并验证 CommonJS 与 ESM 包入口；安装关闭生命周期脚本，wheel 使用 `--no-index --only-binary=:all:`。这些作业不安装 Rust 工具链、不执行编译，但宿主 runner 可能预装编译器，不能当作严格无编译器系统的验证。
+
+完整版本矩阵的结果以对应提交的 GitHub Actions 状态为准；正式发布前仍需最低系统版本及动态库依赖审计、发布账号与 Trusted Publishing 配置。
 
 ```text
 python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl
@@ -74,10 +80,10 @@ python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl
 - 联调时 PATH 只保留系统目录及 Node 启动器，未暴露 Rust/MSVC；Python 从独立消费虚拟环境加载 wheel，Node 从独立消费目录加载 npm tarball。
 - 三个新增 crate 的 `cargo clippy --locked -- -D warnings` 通过；Native packages 工作流通过 actionlint 检查。
 - Windows 动态依赖检查：Python 扩展依赖 python3.dll、系统 DLL 与 VC Runtime；Node 扩展依赖系统 DLL 与 VC Runtime，均未依赖外部 libssl/libcrypto DLL。消费机器仍须满足 Python/Node 本身及 VC Runtime 的要求。
-- Linux/macOS 尚未实际构建；Python 其他版本及 Node 22 尚未执行测试。
+- 随后提交 `f80c2806` 的五平台 CI 已全部通过，包含 Linux/macOS 实际构建、CPython 3.13/Node 24 安装与协议测试：[运行记录](https://github.com/heiqishi666/tlsurl/actions/runs/34705604255)。本轮扩展版本矩阵尚需新的 CI 结果确认。
 - 上游 dev-dependency `sysinfo 0.39.x` 声明 Rust 1.95；本轮未改动上游依赖，也未用 Rust 1.94 宣称全仓 `cargo test --workspace` 通过。绑定构建不依赖该 benchmark 依赖。
 
-工作流只生成 GitHub Actions 工件，不上传 PyPI/npm。发布账号、Trusted Publishing、正式主包聚合和完整平台验收完成后再单独开放发布。
+工作流只生成 GitHub Actions 工件，不上传 PyPI/npm。正式发布时必须先上传所有平台 npm 包，核验可下载后再上传主包，避免用户安装时缺少对应的可选依赖。聚合包的安装前提是保留 optionalDependencies，不能使用 `--omit=optional`。
 上游自带 CI/发布流程尚未改造，不要推送版本标签触发原 wreq 发布任务。
 
 原代码及协议来自 wreq/reqwest；所有分发包保留 Apache-2.0 LICENSE。
