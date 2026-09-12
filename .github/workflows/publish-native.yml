@@ -61,7 +61,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm --version
+          node -e "const v=require('child_process').execFileSync('npm',['--version'],{encoding:'utf8'}).trim(); const [major,minor,patch]=v.split('.').map(Number); if(major<11 || (major===11 && (minor<5 || (minor===5 && patch<1)))) throw Error('npm >=11.5.1 required'); console.log('npm '+v)"
           args=()
           if [[ "$APPLY_PUBLISH" == 'true' ]]; then args+=(--apply); fi
           python scripts/publish_packages.py --directory dist/release --commit "$SOURCE_COMMIT" --registry npm "${args[@]}"
@@ -70,12 +70,16 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/pypi
+      - name: Verify public registry archive bytes
+        if: inputs.publish
+        run: python scripts/verify_registry.py --directory dist/release --commit "$SOURCE_COMMIT" --output dist/registry-verification.json
       - name: Preserve publication evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: native-publication-evidence
           path: |
+            dist/registry-verification.json
             dist/release/SHA256SUMS
             dist/release/native-audit-*.json
           if-no-files-found: ignore

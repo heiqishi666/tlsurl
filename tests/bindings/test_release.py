@@ -1,5 +1,6 @@
 """Reject releases from failed/incomplete runs and tampered artifact bundles."""
 import hashlib
+import io
 import json
 from pathlib import Path
 import sys
@@ -11,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from prepare_release import prepare, verify
 from publish_packages import npm, pypi
 from test_audit import tar
+from verify_registry import check_download
 
 
 class ReleaseTests(unittest.TestCase):
@@ -71,6 +73,26 @@ class RegistryRetryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "published PyPI content differs"):
                     pypi(root, {"version": "0.1.0"}, root / "rejected")
                 self.assertFalse((root / "rejected").exists())
+
+
+class RegistryDownloadTests(unittest.TestCase):
+    def test_actual_bytes_must_match(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "package.tgz"
+            path.write_bytes(b"candidate")
+            for body, succeeds in [(b"candidate", True), (b"different", False), (b"extra bytes", False)]:
+                response = io.BytesIO(body)
+                response.url = "https://registry.npmjs.org/test.tgz"
+                with patch("verify_registry.urlopen", return_value=response):
+                    if succeeds:
+                        self.assertEqual(check_download(response.url, path, "registry.npmjs.org")["bytes"], 9)
+                    else:
+                        with self.assertRaises(ValueError):
+                            check_download(response.url, path, "registry.npmjs.org")
+            with patch("verify_registry.urlopen") as fetch:
+                with self.assertRaises(ValueError):
+                    check_download("https://other.example/test.tgz", path, "registry.npmjs.org")
+                fetch.assert_not_called()
 
 
 if __name__ == "__main__":
