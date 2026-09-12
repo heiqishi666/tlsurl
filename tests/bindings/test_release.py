@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from prepare_release import prepare, verify
+from publish_packages import npm, pypi
+from test_audit import tar
 
 
 class ReleaseTests(unittest.TestCase):
@@ -42,6 +44,33 @@ class ReleaseTests(unittest.TestCase):
             (root / "artifact-0.txt").write_bytes(b"tampered")
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 verify(root, "a" * 40)
+
+
+class RegistryRetryTests(unittest.TestCase):
+    def test_npm_conflict_prevents_all_writes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ["platform", "main"]:
+                tar(root / f"{name}.tgz", {"package.json": {"name": name}})
+            with patch("publish_packages.remote_json", side_effect=[None, {"dist": {"integrity": "wrong"}}]), patch("publish_packages.subprocess.run") as publish:
+                with self.assertRaisesRegex(ValueError, "published npm content differs"):
+                    npm(root, {"npm": ["platform.tgz", "main.tgz"], "version": "0.1.0"}, apply=True)
+                publish.assert_not_called()
+
+    def test_pypi_retry_selects_only_missing_identical_version_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "one.whl").write_bytes(b"one")
+            (root / "two.whl").write_bytes(b"two")
+            remote = {"urls": [{"filename": "one.whl", "digests": {"sha256": hashlib.sha256(b"one").hexdigest()}}]}
+            with patch("publish_packages.remote_json", return_value=remote):
+                self.assertEqual(pypi(root, {"version": "0.1.0"}, root / "pending"), 1)
+                self.assertEqual([p.name for p in (root / "pending").iterdir()], ["two.whl"])
+            remote["urls"][0]["digests"]["sha256"] = "wrong"
+            with patch("publish_packages.remote_json", return_value=remote):
+                with self.assertRaisesRegex(ValueError, "published PyPI content differs"):
+                    pypi(root, {"version": "0.1.0"}, root / "rejected")
+                self.assertFalse((root / "rejected").exists())
 
 
 if __name__ == "__main__":

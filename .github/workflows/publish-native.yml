@@ -1,0 +1,81 @@
+name: Publish native packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Native packages run for this exact main commit
+        required: true
+        type: string
+      publish:
+        description: Publish to official registries (false performs validation and npm dry-run)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tlsurl-native-publication
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main' && github.repository == 'heiqishi666/tlsurl'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: native-release
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN: ${{ inputs.run_id }}
+      SOURCE_COMMIT: ${{ github.sha }}
+      APPLY_PUBLISH: ${{ inputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Check release source and download verified artifacts
+        run: python scripts/prepare_release.py --run-id "$BUILD_RUN" --commit "$SOURCE_COMMIT" --destination dist/release
+      - name: Check wheel metadata
+        run: |
+          python -m pip install twine==6.2.0
+          python -m twine check --strict dist/release/*.whl
+      - name: Prepare only unpublished PyPI wheels
+        id: pypi
+        run: |
+          python scripts/publish_packages.py --directory dist/release --commit "$SOURCE_COMMIT" --registry pypi --pending dist/pypi
+          count=$(find dist/pypi -name '*.whl' | wc -l)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+      - name: Publish npm platform packages followed by main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm --version
+          args=()
+          if [[ "$APPLY_PUBLISH" == 'true' ]]; then args+=(--apply); fi
+          python scripts/publish_packages.py --directory dist/release --commit "$SOURCE_COMMIT" --registry npm "${args[@]}"
+      - name: Publish PyPI wheels with trusted publishing
+        if: inputs.publish && steps.pypi.outputs.count != '0'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/pypi
+      - name: Preserve publication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-publication-evidence
+          path: |
+            dist/release/SHA256SUMS
+            dist/release/native-audit-*.json
+          if-no-files-found: ignore

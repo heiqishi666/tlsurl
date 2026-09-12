@@ -16,5 +16,10 @@
   },
   "os": [
     "darwin"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heiqishi666/tlsurl.git",
+    "directory": "bindings/node/npm/darwin-arm64"
+  }
 }

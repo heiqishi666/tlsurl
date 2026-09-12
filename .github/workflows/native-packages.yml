@@ -137,6 +137,7 @@ jobs:
           pattern: tlsurl-*
           path: dist/download
       - run: python tests/bindings/test_audit.py
+      - run: python tests/bindings/test_release.py
       - run: python scripts/collect_native.py --source dist/download --destination dist/release
       - uses: actions/upload-artifact@v4
         with:
