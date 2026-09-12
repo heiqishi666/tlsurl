@@ -1,4 +1,4 @@
-# tlsurl 原生绑定第一阶段
+# tlsurl 原生绑定
 
 基于上游 wreq 提交 `12ccf64bb00e79db6eabd4bc3ccf82871d3eb5a5`。
 保留根 crate 名称和 API，新增共享核心及两种语言绑定。当前版本是开发预览，尚未发布到 PyPI/npm。
@@ -10,11 +10,12 @@
 - 返回：status、最终 URL、重复 Header 列表、二进制 Body。
 - Client 复用连接池及 Cookie store；启用默认重定向和 TLS 证书校验。
 - 默认总超时 30 秒、最大缓冲响应 16 MiB；配置均须为正整数。
-- 当前不读取系统代理，尚无显式代理参数。
-- HTTP 4xx/5xx 返回响应；网络和参数错误抛出异常，消息前缀包含错误分类。
+- 不读取系统代理，通过 `proxy` 显式配置 HTTP/HTTPS/SOCKS 代理；目前本地测试覆盖 HTTP 正向代理。
+- 支持查询参数追加、JSON、Form、Multipart、Basic/Bearer 认证、Cookie 读写及清空、请求级超时和重定向限制。
+- HTTP 4xx/5xx 返回响应；Python `Error.code`、Node `TlsurlError.code` 提供网络错误分类；通过 `raise_for_status()` / `raiseForStatus()` 显式检查 HTTP 状态。
 - Python 异步取消通过 pyo3-async-runtimes 传递；Node AbortSignal 尚未实现。
 
-这是第一阶段安装和调用验证接口。指纹预设、高级 TLS/HTTP2 参数、结构化 JSON/Form、流式读取、WebSocket、代理和统一异常类仍待后续实现，不宣称已完成此前方案的全部能力。
+指纹预设、高级 TLS/HTTP2 参数、流式读取、WebSocket、Node AbortSignal 仍待后续实现。首发范围与后续队列见 [交付规格](delivery-plan.md)。
 
 ```python
 from tlsurl import Client, AsyncClient
@@ -35,6 +36,43 @@ console.log(response.status, response.body.toString('utf8'))
 响应 Header 的 value 在 Python 中是 bytes，在 Node 中是 Buffer，避免有损文本转换。请求 Header 同样使用 bytes/Buffer。
 HTTP/1 请求保留自定义 Header 名称大小写；上游会将同名重复字段分组，并采用首次出现的名称拼写，不能保证同名字段分别使用不同大小写或任意交错顺序。响应名称采用上游解析后的形式。
 当前缓冲响应可以反复访问 body；后续流式响应将采用不同的对象和一次消费语义。
+
+## 基础请求与配置
+
+```python
+with Client(connect_timeout_ms=5000, max_redirects=5, user_agent="my-app/1.0") as client:
+    response = client.post("https://example.com/api", params=[("page", "1")], json={"name": "demo"})
+    response.raise_for_status()
+    data = response.json()
+    client.set_cookie("https://example.com", "session=value; Path=/; Secure")
+    selected = client.cookies("https://example.com/api")
+    client.clear_cookies()
+```
+
+```javascript
+const client = new Client({ connectTimeoutMs: 5000, maxRedirects: 5, userAgent: 'my-app/1.0' })
+try {
+  const response = await client.post('https://example.com/upload', {
+    multipart: [
+      { name: 'title', data: 'demo' },
+      { name: 'file', filename: 'data.bin', contentType: 'application/octet-stream', data: Buffer.from([0, 1, 2]) },
+    ],
+  })
+  response.raiseForStatus()
+} finally {
+  client.close()
+}
+```
+
+Python Multipart 字段使用 `name/data/filename/content_type`，Node 使用 `name/data/filename/contentType`；当前文件内容由调用者读成 bytes/Buffer，上传编码由 Rust 生成，尚不是磁盘流式上传。`body/json/form/multipart` 互斥；参数支持重复键，追加而不覆盖 URL 已有查询。params 和 form 使用字符串键值对。
+
+客户端配置为 Python `connect_timeout_ms/read_timeout_ms/proxy/verify/ca_pem/max_redirects/cookies/user_agent/http_version`；Node 对应 camelCase。`http_version` 为 `auto/1.1/2`。`ca_pem` 是 PEM 内容，替换默认信任库；`verify=False` 仅在显式配置时关闭证书校验。重定向上限 0 表示不跟随。
+
+请求配置为 Python `params/json/form/multipart/basic_auth/bearer_token/timeout_ms/max_redirects`；Node 对应 camelCase。认证选项互斥，也不允许与显式 Authorization Header 混用。响应 `text()` 默认 UTF-8，`json()` 解析失败保留语言原生 JSON 异常。
+
+Cookie 按上游域、路径、Secure 和过期规则接受与选择；`set_cookie` 不绕过这些规则，例如从 HTTP 来源写入 Secure Cookie 会被忽略。`cookies=False` 禁止自动收发存储 Cookie，但显式 Cookie Header 仍由调用者控制。
+
+`close()` 释放客户端持有的连接池引用并拒绝新请求；已经提交的请求可继续完成。Python 支持 `with Client()` / `async with AsyncClient()`。强制取消在途请求仍属于后续生命周期阶段。
 
 ## 构建
 
