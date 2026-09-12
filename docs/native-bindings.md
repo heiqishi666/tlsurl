@@ -72,7 +72,7 @@ Python Multipart 字段使用 `name/data/filename/content_type`，Node 使用 `n
 
 Cookie 按上游域、路径、Secure 和过期规则接受与选择；`set_cookie` 不绕过这些规则，例如从 HTTP 来源写入 Secure Cookie 会被忽略。`cookies=False` 禁止自动收发存储 Cookie，但显式 Cookie Header 仍由调用者控制。
 
-`close()` 释放客户端持有的连接池引用并拒绝新请求；已经提交的请求可继续完成。Python 支持 `with Client()` / `async with AsyncClient()`。强制取消在途请求仍属于后续生命周期阶段。
+`close()` 释放客户端持有的连接池引用并拒绝新请求；已经提交的请求可继续完成。Python 支持 `with Client()` / `async with AsyncClient()`。单独请求可通过 Python asyncio 取消或 Node AbortSignal 中止；流式响应拥有独立 close。
 
 ## TLS / HTTP 配置
 
@@ -111,6 +111,51 @@ Python `available_profiles()` / Node `availableProfiles()` 返回实际编译的
 预设先应用，随后显式 TLS/HTTP2 字段逐项覆盖，未指定字段保留预设值；请求提供 Header 顺序时覆盖默认顺序。配置修改后不再承诺与原预设完全相同。测试覆盖三个代表性浏览器的真实 TLS/HTTP2 连接，以及 Chrome UA、HTTP2 表大小和覆盖规则；未逐一对照真实浏览器的全部指纹。
 
 默认启用 gzip、deflate、Brotli、Zstd 自动解压，缓冲大小限制作用于解压后的字节。`decompress=False` / `{decompress: false}` 可保留压缩响应字节；若同时使用带 Accept-Encoding 的预设，服务端仍可能发送压缩响应，调用者须自行处理。
+
+## 流式响应与取消
+
+`Client.stream(method, url, ...)` 返回独立的 StreamResponse，读取响应头后即可返回，不先缓冲完整正文。请求配置与普通 request 一致。流式读取不使用 max_response_bytes 总量限制；下载到内存时，调用者应自行限制累计大小。请求超时仍覆盖正文读取，解压选项同样生效。
+
+Python 同步：
+
+```python
+with Client() as client:
+    with client.stream("GET", url) as response:
+        response.raise_for_status()
+        with open("download.bin", "wb") as output:
+            for chunk in response:
+                output.write(chunk)
+```
+
+Python 异步：
+
+```python
+async with AsyncClient() as client:
+    async with await client.stream("GET", url) as response:
+        async for chunk in response:
+            await consume(chunk)
+```
+
+也可使用 `next_chunk()` / `await next_chunk_async()`；EOF 返回 None。asyncio Task 取消会释放底层请求；取消正在等待的 next_chunk_async 会同时关闭该响应。同步读取可由另一个线程调用 response.close() 中断。需要提前退出 Python 循环时使用上述上下文管理，不依赖生成器垃圾回收的时机。
+
+Node：
+
+```javascript
+const controller = new AbortController()
+const response = await client.stream('GET', url, { signal: controller.signal })
+try {
+  response.raiseForStatus()
+  for await (const chunk of response) await consume(chunk)
+} finally {
+  response.close()
+}
+```
+
+也可调用 `await response.nextChunk()`，EOF 返回 null。for-await 循环正常结束、break 或异常退出时自动关闭响应。AbortSignal 可用于普通请求和流式请求，在响应头到达前后均可中止；已经 abort 的 signal 不发送请求。监听器在完成/关闭后移除，取消返回 `CANCELLED`。
+
+response.close() 幂等，唤醒等待中的读取并释放正文；关闭后的读取返回 CANCELLED。EOF 前的并发读取会串行执行，但应用应使用一个消费者以保持处理顺序。Rust 核心按调用拉取数据，没有持续读取正文的应用层后台队列；HTTP/TLS/内核仍有正常协议缓冲。用户自己累计 chunk 或保留未关闭的响应仍会占用内存/连接。
+
+`tests/bindings/stream.py` 验证完整二进制流、超过缓冲上限的流式下载、128 MiB 响应暂停消费后的背压、提前关闭/取消后的服务端连接关闭、正文超时及重复取消。上传当前仍为缓冲 bytes/Buffer，文件流式上传和 WebSocket 尚未实现。
 
 ## 构建
 
@@ -156,7 +201,7 @@ python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl
 - 联调时 PATH 只保留系统目录及 Node 启动器，未暴露 Rust/MSVC；Python 从独立消费虚拟环境加载 wheel，Node 从独立消费目录加载 npm tarball。
 - 三个新增 crate 的 `cargo clippy --locked -- -D warnings` 通过；Native packages 工作流通过 actionlint 检查。
 - Windows 动态依赖检查：Python 扩展依赖 python3.dll、系统 DLL 与 VC Runtime；Node 扩展依赖系统 DLL 与 VC Runtime，均未依赖外部 libssl/libcrypto DLL。消费机器仍须满足 Python/Node 本身及 VC Runtime 的要求。
-- 随后提交 `f80c2806` 的五平台 CI 已全部通过，包含 Linux/macOS 实际构建、CPython 3.13/Node 24 安装与协议测试：[运行记录](https://github.com/heiqishi666/tlsurl/actions/runs/34705604255)。本轮扩展版本矩阵尚需新的 CI 结果确认。
+- 随后提交 `f80c2806` 的五平台 CI 已全部通过，包含 Linux/macOS 实际构建、CPython 3.13/Node 24 安装与协议测试：[运行记录](https://github.com/heiqishi666/tlsurl/actions/runs/34705604255)。后续基础请求与 TLS 配置批次分别通过完整 31 作业矩阵：[基础请求](https://github.com/heiqishi666/tlsurl/actions/runs/34708937263)、[TLS 配置](https://github.com/heiqishi666/tlsurl/actions/runs/34709361700)。浏览器预设与流式批次以各自新运行记录为准。
 - 上游 dev-dependency `sysinfo 0.39.x` 声明 Rust 1.95；本轮未改动上游依赖，也未用 Rust 1.94 宣称全仓 `cargo test --workspace` 通过。绑定构建不依赖该 benchmark 依赖。
 
 工作流只生成 GitHub Actions 工件，不上传 PyPI/npm。正式发布时必须先上传所有平台 npm 包，核验可下载后再上传主包，避免用户安装时缺少对应的可选依赖。聚合包的安装前提是保留 optionalDependencies，不能使用 `--omit=optional`。
