@@ -1,4 +1,4 @@
-import bindings from './index.js'
+import bindings from './client.cjs'
 
-export const { Client } = bindings
+export const { Client, Response, TlsurlError } = bindings
 export default bindings

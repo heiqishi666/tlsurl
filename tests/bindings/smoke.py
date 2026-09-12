@@ -12,6 +12,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import tlsurl
 
@@ -38,7 +39,12 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(0.25)
         status = 200
         headers = [("X-Duplicate", "one"), ("X-Duplicate", "two")]
-        if self.path == "/redirect":
+        if urlsplit(self.path).path == "/inspect":
+            body = json.dumps({"path": self.path, "body": body.decode(),
+                               "authorization": self.headers.get("Authorization"),
+                               "content_type": self.headers.get("Content-Type"),
+                               "user_agent": self.headers.get("User-Agent")}).encode()
+        elif self.path == "/redirect":
             status = 302
             headers.append(("Location", "/cookie"))
             headers.append(("Set-Cookie", "session=works; Path=/"))
@@ -90,6 +96,35 @@ def check_sync(base):
     expect_error(lambda: client.request("BAD METHOD", base), "INVALID_REQUEST")
     expect_error(lambda: tlsurl.Client(30).request("GET", base + "/slow"), "TIMEOUT")
     expect_error(lambda: tlsurl.Client(max_response_bytes=1024).request("GET", base + "/large"), "BODY_TOO_LARGE")
+    response = client.get(base + "/inspect?existing=1", params=[("q", "a b"), ("q", "中文")])
+    assert response.json()["path"] == "/inspect?existing=1&q=a+b&q=%E4%B8%AD%E6%96%87"
+    response = client.post(base + "/inspect", json={"word": "中文"})
+    assert json.loads(response.json()["body"]) == {"word": "中文"}
+    assert response.json()["content_type"] == "application/json"
+    assert client.post(base + "/inspect", json=None).json()["body"] == "null"
+    assert client.post(base + "/inspect", form=[("q", "a b"), ("q", "中文")]).json()["body"] == "q=a+b&q=%E4%B8%AD%E6%96%87"
+    assert client.get(base + "/inspect", basic_auth=("user", "pass")).json()["authorization"] == "Basic dXNlcjpwYXNz"
+    assert client.get(base + "/inspect", bearer_token="token").json()["authorization"] == "Bearer token"
+    assert client.get(base + "/redirect", max_redirects=0).status == 302
+    client.clear_cookies()
+    assert client.get(base + "/cookie").body == b""
+    assert tlsurl.Client(cookies=False).get(base + "/redirect").body == b""
+    with tlsurl.Client(user_agent="tlsurl-test", http_version="1.1") as configured:
+        assert configured.get(base + "/inspect").json()["user_agent"] == "tlsurl-test"
+    expect_error(lambda: configured.get(base), "CLOSED")
+    expect_error(lambda: client.get(base + "/slow", timeout_ms=10), "TIMEOUT")
+    expect_error(lambda: client.post(base, body=b"x", json={}), "INVALID_REQUEST")
+    expect_error(lambda: client.get(base, basic_auth=("u", "p"), bearer_token="t"), "INVALID_REQUEST")
+    expect_error(lambda: tlsurl.Client(connect_timeout_ms=0), "INVALID_CONFIG")
+    expect_error(lambda: tlsurl.Client(unknown=True), "INVALID_CONFIG")
+    try:
+        client.get(base + "/error").raise_for_status()
+    except tlsurl.Error as error:
+        assert error.code == "HTTP_STATUS"
+    else:
+        raise AssertionError("HTTP status error missing")
+    # This fixture acts as a forward proxy; the invalid destination must never be resolved.
+    assert tlsurl.Client(proxy=base).get("http://not-a-real-host.invalid/inspect").json()["path"] == "http://not-a-real-host.invalid/inspect"
 
 
 async def check_async(base):
@@ -108,6 +143,14 @@ async def check_async(base):
     else:
         raise AssertionError("request was not cancelled")
     assert (await client.request("GET", base + "/echo")).status == 200
+    async with tlsurl.AsyncClient() as configured:
+        assert (await configured.post(base + "/echo", json={"async": True})).json() == {"async": True}
+    try:
+        await configured.get(base)
+    except tlsurl.Error as error:
+        assert error.code == "CLOSED"
+    else:
+        raise AssertionError("closed async client accepted request")
 
 
 def main():
@@ -142,6 +185,7 @@ def main():
             pass
         else:
             raise AssertionError("untrusted TLS certificate was accepted")
+        assert tlsurl.Client(verify=False).get(tls_base).status == 200
         subprocess.run([
             "node", str(Path(__file__).with_name("smoke.cjs")), base,
             str(Path(args.node_module).resolve()), tls_base, *(["--https"] if args.https else []),

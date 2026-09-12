@@ -33,14 +33,25 @@ fn config_integer(value: Option<f64>, default: u32) -> Result<u32> {
 #[napi]
 impl Client {
     #[napi(constructor)]
-    pub fn new(timeout_ms: Option<f64>, max_response_bytes: Option<f64>) -> Result<Self> {
+    pub fn new(
+        timeout_ms: Option<f64>,
+        max_response_bytes: Option<f64>,
+        options: Option<String>,
+    ) -> Result<Self> {
         Ok(Self {
-            inner: tlsurl_core::Client::new(
+            inner: tlsurl_core::Client::with_options(
                 config_integer(timeout_ms, 30000)?,
                 config_integer(max_response_bytes, 16777216)?,
+                tlsurl_core::parse_options(options.as_deref())
+                    .map_err(|error| Error::from_reason(error.to_string()))?,
             )
             .map_err(|error| Error::from_reason(error.to_string()))?,
         })
+    }
+
+    #[napi]
+    pub fn clear_cookies(&self) {
+        self.inner.clear_cookies();
     }
 
     #[napi]
@@ -51,7 +62,10 @@ impl Client {
         url: String,
         headers: Option<Vec<Header>>,
         body: Option<Buffer>,
+        options: Option<String>,
     ) -> Result<PromiseRaw<'env, Response>> {
+        let options = tlsurl_core::parse_options(options.as_deref())
+            .map_err(|error| Error::from_reason(error.to_string()))?;
         let headers = headers
             .unwrap_or_default()
             .into_iter()
@@ -62,7 +76,7 @@ impl Client {
         let client = self.inner.clone();
         env.spawn_future(async move {
             let response = client
-                .request(method, url, headers, body)
+                .request_with_options(method, url, headers, body, options)
                 .await
                 .map_err(|error| Error::from_reason(error.to_string()))?;
             Ok(Response {

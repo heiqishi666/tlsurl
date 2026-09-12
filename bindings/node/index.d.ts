@@ -2,8 +2,9 @@
 /* eslint-disable */
 
 export declare class Client {
-  constructor(timeoutMs?: number | undefined | null, maxResponseBytes?: number | undefined | null)
-  request(method: string, url: string, headers?: Array<Header> | undefined | null, body?: Buffer | undefined | null): Promise<Response>
+  constructor(timeoutMs?: number | undefined | null, maxResponseBytes?: number | undefined | null, options?: string | undefined | null)
+  clearCookies(): void
+  request(method: string, url: string, headers?: Array<Header> | undefined | null, body?: Buffer | undefined | null, options?: string | undefined | null): Promise<Response>
 }
 
 export interface Header {

@@ -43,7 +43,7 @@ def main():
     manifest.pop("devDependencies", None)
     manifest.pop("scripts", None)
     manifest.pop("napi", None)
-    manifest["files"] = ["index.js", "index.mjs", "index.d.ts", "LICENSE"]
+    manifest["files"] = ["index.js", "index.mjs", "index.d.ts", "client.cjs", "client.d.ts", "LICENSE"]
     manifest["optionalDependencies"] = {}
     for package in sorted((NODE / "npm").glob("*/package.json")):
         platform_manifest = json.loads(package.read_text())

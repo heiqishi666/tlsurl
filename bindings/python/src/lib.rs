@@ -44,15 +44,24 @@ struct Client {
 #[pymethods]
 impl Client {
     #[new]
-    #[pyo3(signature = (timeout_ms=30000, max_response_bytes=16777216))]
-    fn new(timeout_ms: u32, max_response_bytes: u32) -> PyResult<Self> {
+    #[pyo3(signature = (timeout_ms=30000, max_response_bytes=16777216, options=None))]
+    fn new(timeout_ms: u32, max_response_bytes: u32, options: Option<String>) -> PyResult<Self> {
         let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         Ok(Self {
-            inner: tlsurl_core::Client::new(timeout_ms, max_response_bytes).map_err(py_error)?,
+            inner: tlsurl_core::Client::with_options(
+                timeout_ms,
+                max_response_bytes,
+                tlsurl_core::parse_options(options.as_deref()).map_err(py_error)?,
+            )
+            .map_err(py_error)?,
         })
     }
 
-    #[pyo3(signature = (method, url, headers=None, body=None))]
+    fn clear_cookies(&self) {
+        self.inner.clear_cookies();
+    }
+
+    #[pyo3(signature = (method, url, headers=None, body=None, options=None))]
     fn request(
         &self,
         py: Python<'_>,
@@ -60,19 +69,24 @@ impl Client {
         url: String,
         headers: Option<Vec<(String, Vec<u8>)>>,
         body: Option<Vec<u8>>,
+        options: Option<String>,
     ) -> PyResult<Response> {
+        let options = tlsurl_core::parse_options(options.as_deref()).map_err(py_error)?;
         py.detach(|| {
             pyo3_async_runtimes::tokio::get_runtime()
-                .block_on(
-                    self.inner
-                        .request(method, url, headers.unwrap_or_default(), body),
-                )
+                .block_on(self.inner.request_with_options(
+                    method,
+                    url,
+                    headers.unwrap_or_default(),
+                    body,
+                    options,
+                ))
                 .map(|inner| Response { inner })
                 .map_err(py_error)
         })
     }
 
-    #[pyo3(signature = (method, url, headers=None, body=None))]
+    #[pyo3(signature = (method, url, headers=None, body=None, options=None))]
     fn request_async<'py>(
         &self,
         py: Python<'py>,
@@ -80,11 +94,13 @@ impl Client {
         url: String,
         headers: Option<Vec<(String, Vec<u8>)>>,
         body: Option<Vec<u8>>,
+        options: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let options = tlsurl_core::parse_options(options.as_deref()).map_err(py_error)?;
         let client = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             client
-                .request(method, url, headers.unwrap_or_default(), body)
+                .request_with_options(method, url, headers.unwrap_or_default(), body, options)
                 .await
                 .map(|inner| Response { inner })
                 .map_err(py_error)

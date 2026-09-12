@@ -3,17 +3,27 @@
   "version": "0.1.0",
   "description": "Rust-powered HTTP client with native Node.js bindings",
   "license": "Apache-2.0",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "main": "client.cjs",
+  "types": "client.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
+      "types": "./client.d.ts",
       "import": "./index.mjs",
-      "require": "./index.js"
+      "require": "./client.cjs"
     }
   },
-  "files": ["index.js", "index.mjs", "index.d.ts", "*.node", "LICENSE"],
-  "engines": { "node": ">=22" },
+  "files": [
+    "index.js",
+    "index.mjs",
+    "index.d.ts",
+    "*.node",
+    "LICENSE",
+    "client.cjs",
+    "client.d.ts"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "napi build --platform --release -- --locked",
     "artifacts": "napi artifacts",
@@ -29,5 +39,7 @@
       "aarch64-apple-darwin"
     ]
   },
-  "devDependencies": { "@napi-rs/cli": "^3.0.0" }
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  }
 }
