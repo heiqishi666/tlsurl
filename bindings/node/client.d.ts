@@ -83,11 +83,35 @@ export class StreamResponse implements AsyncIterable<Buffer> {
   raiseForStatus(): this
   [Symbol.asyncIterator](): AsyncIterator<Buffer>
 }
+export interface WebSocketOptions {
+  headers?: Header[] | Record<string, string | Uint8Array>
+  protocols?: string[]
+  timeoutMs?: number
+  operationTimeoutMs?: number
+  maxMessageBytes?: number
+  signal?: AbortSignal
+}
+export interface WebSocketMessage {
+  kind: 'text' | 'binary' | 'ping' | 'pong' | 'close'
+  data: Buffer
+  code?: number
+}
+export class WebSocket implements AsyncIterable<WebSocketMessage> {
+  readonly protocol?: string
+  send(data: string | Uint8Array): Promise<void>
+  ping(data?: string | Uint8Array): Promise<void>
+  pong(data?: string | Uint8Array): Promise<void>
+  recv(): Promise<WebSocketMessage | null>
+  close(code?: number, reason?: string): Promise<void>
+  abort(): void
+  [Symbol.asyncIterator](): AsyncIterator<WebSocketMessage>
+}
 export class Client {
   constructor(options?: ClientOptions)
   constructor(timeoutMs?: number, maxResponseBytes?: number)
   request(method: string, url: string, options?: RequestOptions): Promise<Response>
   request(method: string, url: string, headers?: Header[] | null, body?: Uint8Array): Promise<Response>
+  websocket(url: string, options?: WebSocketOptions): Promise<WebSocket>
   stream(method: string, url: string, options?: RequestOptions): Promise<StreamResponse>
   get(url: string, options?: RequestOptions): Promise<Response>
   post(url: string, options?: RequestOptions): Promise<Response>
@@ -96,5 +120,5 @@ export class Client {
   cookies(url: string): {name: string; value: string}[]
   close(): void
 }
-declare const bindings: { Client: typeof Client; Response: typeof Response; StreamResponse: typeof StreamResponse; TlsurlError: typeof TlsurlError; availableProfiles: typeof availableProfiles }
+declare const bindings: { Client: typeof Client; Response: typeof Response; StreamResponse: typeof StreamResponse; WebSocket: typeof WebSocket; TlsurlError: typeof TlsurlError; availableProfiles: typeof availableProfiles }
 export default bindings

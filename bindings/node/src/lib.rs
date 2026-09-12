@@ -96,6 +96,78 @@ impl StreamResponse {
     }
 }
 
+#[napi(object)]
+pub struct WebSocketMessage {
+    pub kind: String,
+    pub data: Buffer,
+    pub code: Option<u16>,
+}
+
+#[napi]
+pub struct WebSocket {
+    inner: Arc<tlsurl_core::websocket::WebSocket>,
+}
+
+#[napi]
+impl WebSocket {
+    #[napi(getter)]
+    pub fn protocol(&self) -> Option<String> {
+        self.inner.protocol.clone()
+    }
+    #[napi]
+    pub fn abort(&self) {
+        self.inner.abort();
+    }
+    #[napi]
+    pub fn send<'env>(
+        &self,
+        env: &'env Env,
+        kind: String,
+        data: Buffer,
+    ) -> Result<PromiseRaw<'env, ()>> {
+        let inner = self.inner.clone();
+        let data = data.to_vec();
+        env.spawn_future(async move {
+            inner
+                .send(kind, data)
+                .await
+                .map_err(|e| Error::from_reason(e.to_string()))
+        })
+    }
+    #[napi]
+    pub fn recv<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Option<WebSocketMessage>>> {
+        let inner = self.inner.clone();
+        env.spawn_future(async move {
+            inner
+                .recv()
+                .await
+                .map(|message| {
+                    message.map(|m| WebSocketMessage {
+                        kind: m.kind.into(),
+                        data: m.data.into(),
+                        code: m.code,
+                    })
+                })
+                .map_err(|e| Error::from_reason(e.to_string()))
+        })
+    }
+    #[napi]
+    pub fn close<'env>(
+        &self,
+        env: &'env Env,
+        code: u16,
+        reason: String,
+    ) -> Result<PromiseRaw<'env, ()>> {
+        let inner = self.inner.clone();
+        env.spawn_future(async move {
+            inner
+                .close(code, reason)
+                .await
+                .map_err(|e| Error::from_reason(e.to_string()))
+        })
+    }
+}
+
 #[napi]
 pub struct Client {
     inner: tlsurl_core::Client,
@@ -233,6 +305,32 @@ impl Client {
                 inner: Arc::new(inner),
             })
             .map_err(|error| Error::from_reason(error.to_string()))
+        })
+    }
+    #[napi]
+    pub fn websocket<'env>(
+        &self,
+        env: &'env Env,
+        url: String,
+        headers: Vec<Header>,
+        options: String,
+        cancellation: &Cancellation,
+    ) -> Result<PromiseRaw<'env, WebSocket>> {
+        let options = tlsurl_core::parse_options(Some(&options))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let headers = headers
+            .into_iter()
+            .map(|h| (h.name, h.value.to_vec()))
+            .collect();
+        let client = self.inner.clone();
+        let token = cancellation.token.clone();
+        env.spawn_future(async move {
+            tlsurl_core::stream::cancellable(&token, client.websocket(url, headers, options))
+                .await
+                .map(|inner| WebSocket {
+                    inner: Arc::new(inner),
+                })
+                .map_err(|e| Error::from_reason(e.to_string()))
         })
     }
 }

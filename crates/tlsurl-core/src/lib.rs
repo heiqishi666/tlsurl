@@ -8,6 +8,7 @@ use wreq::cookie::IntoCookie;
 mod protocol;
 pub mod stream;
 mod upload;
+pub mod websocket;
 pub use stream::StreamResponse;
 
 #[derive(Deserialize)]

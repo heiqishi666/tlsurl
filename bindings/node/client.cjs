@@ -50,6 +50,42 @@ class StreamResponse {
     } finally { this.close() }
   }
 }
+class WebSocket {
+  constructor(value, cleanup) { this._native = value; this._cleanup = cleanup; this.protocol = value.protocol }
+  async _send(kind, data) {
+    try { await this._native.send(kind, Buffer.from(data)) } catch (error) { throw convertError(error) }
+  }
+  send(data) { return this._send(typeof data === 'string' ? 'text' : 'binary', data) }
+  ping(data = Buffer.alloc(0)) { return this._send('ping', data) }
+  pong(data = Buffer.alloc(0)) { return this._send('pong', data) }
+  async recv() {
+    try {
+      const message = await this._native.recv()
+      if (message == null || message.kind === 'close') this._cleanup()
+      return message
+    } catch (error) { this._cleanup(); throw convertError(error) }
+  }
+  async close(code = 1000, reason = '') {
+    if (!Number.isInteger(code) || code < 0 || code > 65535) throw new TlsurlError('INVALID_REQUEST', 'invalid close code')
+    try { await this._native.close(code, reason); this._cleanup() }
+    catch (error) {
+      const converted = convertError(error)
+      if (converted.code !== 'INVALID_REQUEST') this.abort()
+      throw converted
+    }
+  }
+  abort() { this._native.abort(); this._cleanup() }
+  async *[Symbol.asyncIterator]() {
+    try {
+      for (;;) {
+        const message = await this.recv()
+        if (message == null) return
+        yield message
+        if (message.kind === 'close') return
+      }
+    } finally { await this.close() }
+  }
+}
 const clientKeys = {
   connectTimeoutMs: 'connect_timeout_ms', readTimeoutMs: 'read_timeout_ms',
   proxy: 'proxy', verify: 'verify', caPem: 'ca_pem', maxRedirects: 'max_redirects',
@@ -154,6 +190,26 @@ class Client {
       return new Response(result)
     } catch (error) { cleanup(); throw convertError(error) }
   }
+  async websocket(url, options = {}) {
+    if (!this._native) throw new TlsurlError('CLOSED', 'client is closed')
+    const { headers = [], signal, ...rest } = options
+    const config = optionsJson(rest, { protocols: 'protocols', timeoutMs: 'timeout_ms', operationTimeoutMs: 'operation_timeout_ms', maxMessageBytes: 'max_message_bytes' })
+    const normalized = (Array.isArray(headers) ? headers : Object.entries(headers).map(([name, value]) => ({name, value})))
+      .map(({name, value}) => ({name, value: Buffer.from(value)}))
+    if (signal != null && !(signal instanceof AbortSignal)) throw new TlsurlError('INVALID_CONFIG', 'signal must be an AbortSignal')
+    const cancellation = new native.Cancellation()
+    let socketRef
+    const abort = () => { cancellation.cancel(); socketRef?.deref()?.abort() }
+    const cleanup = () => signal?.removeEventListener('abort', abort)
+    signal?.addEventListener('abort', abort, {once: true})
+    if (signal?.aborted) abort()
+    try {
+      const socket = await this._native.websocket(url, normalized, JSON.stringify(config), cancellation)
+      if (signal?.aborted) { socket.abort(); throw new TlsurlError('CANCELLED', 'operation cancelled') }
+      socketRef = new WeakRef(socket)
+      return new WebSocket(socket, cleanup)
+    } catch (error) { cleanup(); throw convertError(error) }
+  }
   get(url, options) { return this.request('GET', url, options) }
   post(url, options) { return this.request('POST', url, options) }
   setCookie(url, value) {
@@ -170,4 +226,4 @@ class Client {
   }
   close() { this._native = null }
 }
-module.exports = { Client, Response, StreamResponse, TlsurlError, availableProfiles: native.availableProfiles }
+module.exports = { Client, Response, StreamResponse, WebSocket, TlsurlError, availableProfiles: native.availableProfiles }

@@ -116,6 +116,128 @@ class StreamResponse(_ResponseHead):
         self.close()
 
 
+class WebSocketMessage:
+    def __init__(self, native):
+        self.kind, self.data, self.code = native.kind, native.data, native.code
+
+
+class WebSocket:
+    def __init__(self, native):
+        self._native = native
+        self.protocol = native.protocol
+
+    def _send(self, kind, data):
+        data = data.encode() if isinstance(data, str) else bytes(data)
+        try:
+            self._native.send(kind, data)
+        except RuntimeError as error:
+            raise _error(error) from None
+
+    def send(self, data):
+        return self._send("text" if isinstance(data, str) else "binary", data)
+
+    def ping(self, data=b""):
+        return self._send("ping", data)
+
+    def pong(self, data=b""):
+        return self._send("pong", data)
+
+    def recv(self):
+        try:
+            value = self._native.recv()
+            return WebSocketMessage(value) if value is not None else None
+        except RuntimeError as error:
+            raise _error(error) from None
+
+    def close(self, code=1000, reason=""):
+        if type(code) is not int or not 0 <= code <= 65535:
+            raise Error("INVALID_REQUEST", "invalid close code")
+        try:
+            self._native.close(code, reason)
+        except RuntimeError as error:
+            raise _error(error) from None
+
+    def abort(self):
+        self._native.abort()
+
+    def __iter__(self):
+        try:
+            while True:
+                message = self.recv()
+                if message is None:
+                    return
+                yield message
+                if message.kind == "close":
+                    return
+        finally:
+            self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exception_type, *_):
+        self.abort() if exception_type else self.close()
+
+
+class AsyncWebSocket(WebSocket):
+    async def _send(self, kind, data):
+        data = data.encode() if isinstance(data, str) else bytes(data)
+        try:
+            await self._native.send_async(kind, data)
+        except RuntimeError as error:
+            raise _error(error) from None
+        except BaseException:
+            self.abort()
+            raise
+
+    async def recv(self):
+        try:
+            value = await self._native.recv_async()
+            return WebSocketMessage(value) if value is not None else None
+        except RuntimeError as error:
+            raise _error(error) from None
+        except BaseException:
+            self.abort()
+            raise
+
+    async def close(self, code=1000, reason=""):
+        if type(code) is not int or not 0 <= code <= 65535:
+            raise Error("INVALID_REQUEST", "invalid close code")
+        try:
+            await self._native.close_async(code, reason)
+        except RuntimeError as error:
+            raise _error(error) from None
+        except BaseException:
+            self.abort()
+            raise
+
+    async def __aiter__(self):
+        try:
+            while True:
+                message = await self.recv()
+                if message is None:
+                    return
+                yield message
+                if message.kind == "close":
+                    return
+        finally:
+            await self.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exception_type, *_):
+        if exception_type:
+            self.abort()
+        else:
+            await self.close()
+
+
+def _websocket_options(headers, options):
+    return [(name, value.encode() if isinstance(value, str) else bytes(value))
+            for name, value in _pairs(headers or [])], _json.dumps(options, allow_nan=False)
+
+
 def _pairs(value):
     return list(value.items()) if hasattr(value, "items") else list(value)
 
@@ -215,6 +337,20 @@ class Client:
         except RuntimeError as error:
             raise _error(error) from None
 
+    def websocket(self, url, headers=None, **options):
+        headers, config = _websocket_options(headers, options)
+        try:
+            return WebSocket(self._get_client().websocket(url, headers, config))
+        except RuntimeError as error:
+            raise _error(error) from None
+
+    async def websocket_async(self, url, headers=None, **options):
+        headers, config = _websocket_options(headers, options)
+        try:
+            return AsyncWebSocket(await self._get_client().websocket_async(url, headers, config))
+        except RuntimeError as error:
+            raise _error(error) from None
+
     def get(self, url, **options):
         return self.request("GET", url, **options)
 
@@ -248,6 +384,9 @@ class Client:
 
 
 class AsyncClient(Client):
+    async def websocket(self, url, headers=None, **options):
+        return await self.websocket_async(url, headers, **options)
+
     async def stream(self, method, url, headers=None, body=None, **options):
         return await self.stream_async(method, url, headers, body, **options)
 
@@ -262,4 +401,4 @@ class AsyncClient(Client):
         self.close()
 
 
-__all__ = ["Client", "AsyncClient", "Response", "StreamResponse", "Error", "available_profiles"]
+__all__ = ["Client", "AsyncClient", "Response", "StreamResponse", "WebSocket", "AsyncWebSocket", "WebSocketMessage", "Error", "available_profiles"]

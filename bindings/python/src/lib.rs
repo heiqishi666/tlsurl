@@ -91,6 +91,90 @@ impl StreamResponse {
 }
 
 #[pyclass(module = "tlsurl._native")]
+struct WebSocketMessage {
+    inner: tlsurl_core::websocket::WebSocketMessage,
+}
+#[pymethods]
+impl WebSocketMessage {
+    #[getter]
+    fn kind(&self) -> &str {
+        self.inner.kind
+    }
+    #[getter]
+    fn code(&self) -> Option<u16> {
+        self.inner.code
+    }
+    #[getter]
+    fn data<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.inner.data)
+    }
+}
+
+#[pyclass(module = "tlsurl._native")]
+struct WebSocket {
+    inner: Arc<tlsurl_core::websocket::WebSocket>,
+}
+#[pymethods]
+impl WebSocket {
+    #[getter]
+    fn protocol(&self) -> Option<String> {
+        self.inner.protocol.clone()
+    }
+    fn abort(&self) {
+        self.inner.abort();
+    }
+    fn send(&self, py: Python<'_>, kind: String, data: Vec<u8>) -> PyResult<()> {
+        py.detach(|| {
+            pyo3_async_runtimes::tokio::get_runtime().block_on(self.inner.send(kind, data))
+        })
+        .map_err(py_error)
+    }
+    fn send_async<'py>(
+        &self,
+        py: Python<'py>,
+        kind: String,
+        data: Vec<u8>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            inner.send(kind, data).await.map_err(py_error)
+        })
+    }
+    fn recv(&self, py: Python<'_>) -> PyResult<Option<WebSocketMessage>> {
+        py.detach(|| pyo3_async_runtimes::tokio::get_runtime().block_on(self.inner.recv()))
+            .map(|message| message.map(|inner| WebSocketMessage { inner }))
+            .map_err(py_error)
+    }
+    fn recv_async<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            inner
+                .recv()
+                .await
+                .map(|message| message.map(|inner| WebSocketMessage { inner }))
+                .map_err(py_error)
+        })
+    }
+    fn close(&self, py: Python<'_>, code: u16, reason: String) -> PyResult<()> {
+        py.detach(|| {
+            pyo3_async_runtimes::tokio::get_runtime().block_on(self.inner.close(code, reason))
+        })
+        .map_err(py_error)
+    }
+    fn close_async<'py>(
+        &self,
+        py: Python<'py>,
+        code: u16,
+        reason: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            inner.close(code, reason).await.map_err(py_error)
+        })
+    }
+}
+
+#[pyclass(module = "tlsurl._native")]
 struct Client {
     inner: tlsurl_core::Client,
 }
@@ -215,6 +299,42 @@ impl Client {
                 .map_err(py_error)
         })
     }
+    fn websocket(
+        &self,
+        py: Python<'_>,
+        url: String,
+        headers: Vec<(String, Vec<u8>)>,
+        options: String,
+    ) -> PyResult<WebSocket> {
+        let options = tlsurl_core::parse_options(Some(&options)).map_err(py_error)?;
+        py.detach(|| {
+            pyo3_async_runtimes::tokio::get_runtime()
+                .block_on(self.inner.websocket(url, headers, options))
+        })
+        .map(|inner| WebSocket {
+            inner: Arc::new(inner),
+        })
+        .map_err(py_error)
+    }
+    fn websocket_async<'py>(
+        &self,
+        py: Python<'py>,
+        url: String,
+        headers: Vec<(String, Vec<u8>)>,
+        options: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let options = tlsurl_core::parse_options(Some(&options)).map_err(py_error)?;
+        let client = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            client
+                .websocket(url, headers, options)
+                .await
+                .map(|inner| WebSocket {
+                    inner: Arc::new(inner),
+                })
+                .map_err(py_error)
+        })
+    }
 }
 
 #[pyfunction]
@@ -228,5 +348,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Client>()?;
     module.add_class::<Response>()?;
     module.add_class::<StreamResponse>()?;
+    module.add_class::<WebSocket>()?;
+    module.add_class::<WebSocketMessage>()?;
     Ok(())
 }

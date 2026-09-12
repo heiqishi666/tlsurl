@@ -13,6 +13,7 @@ export declare class Client {
   clearCookies(): void
   request(method: string, url: string, headers: Array<Header> | undefined | null, body: Buffer | undefined | null, options: string | undefined | null, cancellation: Cancellation): Promise<Response>
   stream(method: string, url: string, headers: Array<Header> | undefined | null, body: Buffer | undefined | null, options: string | undefined | null, cancellation: Cancellation): Promise<StreamResponse>
+  websocket(url: string, headers: Array<Header>, options: string, cancellation: Cancellation): Promise<WebSocket>
 }
 
 export declare class StreamResponse {
@@ -22,6 +23,14 @@ export declare class StreamResponse {
   get headers(): Array<Header>
   close(): void
   nextChunk(): Promise<Buffer | undefined | null>
+}
+
+export declare class WebSocket {
+  get protocol(): string | null
+  abort(): void
+  send(kind: string, data: Buffer): Promise<undefined>
+  recv(): Promise<WebSocketMessage | undefined | null>
+  close(code: number, reason: string): Promise<undefined>
 }
 
 export declare function availableProfiles(): Array<string>
@@ -42,4 +51,10 @@ export interface Response {
   url: string
   headers: Array<Header>
   body: Buffer
+}
+
+export interface WebSocketMessage {
+  kind: string
+  data: Buffer
+  code?: number
 }
