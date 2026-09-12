@@ -59,10 +59,10 @@ class Client {
     if (!this._native) throw new TlsurlError('CLOSED', 'client is closed')
     const options = Array.isArray(headersOrOptions) || headersOrOptions == null
       ? { headers: headersOrOptions || [], body: legacyBody } : headersOrOptions
-    const { headers = [], body: rawBody, json, form, params, ...rest } = options
+    const { headers = [], body: rawBody, json, form, multipart, params, ...rest } = options
     const hasJson = Object.hasOwn(options, 'json')
-    if ([rawBody !== undefined && rawBody !== null, hasJson, form !== undefined && form !== null].filter(Boolean).length > 1) {
-      throw new TlsurlError('INVALID_REQUEST', 'body, json and form are mutually exclusive')
+    if ([rawBody !== undefined && rawBody !== null, hasJson, form !== undefined && form !== null, multipart != null].filter(Boolean).length > 1) {
+      throw new TlsurlError('INVALID_REQUEST', 'body, json, form and multipart are mutually exclusive')
     }
     const normalized = (Array.isArray(headers) ? headers : Object.entries(headers).map(([name, value]) => ({ name, value })))
       .map(({ name, value }) => ({ name, value: Buffer.from(value) }))
@@ -78,12 +78,33 @@ class Client {
     if (contentType && !normalized.some(h => h.name.toLowerCase() === 'content-type')) normalized.push({ name: 'Content-Type', value: Buffer.from(contentType) })
     const requestOptions = optionsJson(rest, requestKeys)
     if (params != null) requestOptions.params = pairs(params)
+    if (multipart != null) {
+      const chunks = []
+      let offset = 0
+      requestOptions.multipart = multipart.map(part => {
+        if (Object.keys(part).some(key => !['name', 'data', 'filename', 'contentType'].includes(key))) throw new TlsurlError('INVALID_REQUEST', 'unknown multipart field')
+        const chunk = Buffer.from(part.data)
+        const descriptor = { name: part.name, offset, length: chunk.length, filename: part.filename, content_type: part.contentType }
+        offset += chunk.length
+        chunks.push(chunk)
+        return descriptor
+      })
+      body = Buffer.concat(chunks)
+    }
     try {
       return new Response(await this._native.request(method, url, normalized, body, JSON.stringify(requestOptions)))
     } catch (error) { throw convertError(error) }
   }
   get(url, options) { return this.request('GET', url, options) }
   post(url, options) { return this.request('POST', url, options) }
+  setCookie(url, value) {
+    if (!this._native) throw new TlsurlError('CLOSED', 'client is closed')
+    try { this._native.setCookie(url, value) } catch (error) { throw convertError(error) }
+  }
+  cookies(url) {
+    if (!this._native) throw new TlsurlError('CLOSED', 'client is closed')
+    try { return this._native.cookies(url) } catch (error) { throw convertError(error) }
+  }
   clearCookies() {
     if (!this._native) throw new TlsurlError('CLOSED', 'client is closed')
     this._native.clearCookies()

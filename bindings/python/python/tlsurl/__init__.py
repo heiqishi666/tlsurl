@@ -55,12 +55,12 @@ def _pairs(value):
     return list(value.items()) if hasattr(value, "items") else list(value)
 
 
-def _prepare(headers, body, *, params=None, json=_UNSET, form=None,
+def _prepare(headers, body, *, params=None, json=_UNSET, form=None, multipart=None,
              basic_auth=None, bearer_token=None, timeout_ms=None, max_redirects=None):
     headers = [(name, value.encode("utf-8") if isinstance(value, str) else bytes(value))
                for name, value in _pairs(headers or [])]
-    if sum([body is not None, json is not _UNSET, form is not None]) > 1:
-        raise Error("INVALID_REQUEST", "body, json and form are mutually exclusive")
+    if sum([body is not None, json is not _UNSET, form is not None, multipart is not None]) > 1:
+        raise Error("INVALID_REQUEST", "body, json, form and multipart are mutually exclusive")
     content_type = None
     if json is not _UNSET:
         body = _json.dumps(json, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode()
@@ -77,6 +77,20 @@ def _prepare(headers, body, *, params=None, json=_UNSET, form=None,
                         ("timeout_ms", timeout_ms), ("max_redirects", max_redirects)):
         if value is not None:
             options[name] = value
+    if multipart is not None:
+        chunks, parts, offset = [], [], 0
+        for part in multipart:
+            unknown = set(part) - {"name", "data", "filename", "content_type"}
+            if unknown:
+                raise Error("INVALID_REQUEST", "unknown multipart field")
+            data = part["data"]
+            data = data.encode() if isinstance(data, str) else bytes(data)
+            parts.append({"name": part["name"], "offset": offset, "length": len(data),
+                          "filename": part.get("filename"), "content_type": part.get("content_type")})
+            chunks.append(data)
+            offset += len(data)
+        body = b"".join(chunks)
+        options["multipart"] = parts
     return headers, body, _json.dumps(options, allow_nan=False)
 
 
@@ -117,6 +131,18 @@ class Client:
 
     def post(self, url, **options):
         return self.request("POST", url, **options)
+
+    def set_cookie(self, url, value):
+        try:
+            self._get_client().set_cookie(url, value)
+        except RuntimeError as error:
+            raise _error(error) from None
+
+    def cookies(self, url):
+        try:
+            return self._get_client().cookies(url)
+        except RuntimeError as error:
+            raise _error(error) from None
 
     def clear_cookies(self):
         self._get_client().clear_cookies()

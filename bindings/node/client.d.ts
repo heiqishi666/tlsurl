@@ -14,12 +14,19 @@ export interface ClientOptions {
 }
 export interface Header { name: string; value: string | Uint8Array }
 export type Pairs = [string, string][] | Record<string, string>
+export interface MultipartPart {
+  name: string
+  data: string | Uint8Array
+  filename?: string
+  contentType?: string
+}
 export interface RequestOptions {
   headers?: Header[] | Record<string, string | Uint8Array>
   body?: string | Uint8Array
   json?: unknown
   form?: Pairs
   params?: Pairs
+  multipart?: MultipartPart[]
   timeoutMs?: number
   maxRedirects?: number
   basicAuth?: [string, string]
@@ -43,6 +50,8 @@ export class Client {
   get(url: string, options?: RequestOptions): Promise<Response>
   post(url: string, options?: RequestOptions): Promise<Response>
   clearCookies(): void
+  setCookie(url: string, value: string): void
+  cookies(url: string): {name: string; value: string}[]
   close(): void
 }
 declare const bindings: { Client: typeof Client; Response: typeof Response; TlsurlError: typeof TlsurlError }

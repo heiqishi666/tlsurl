@@ -3,8 +3,15 @@
 
 export declare class Client {
   constructor(timeoutMs?: number | undefined | null, maxResponseBytes?: number | undefined | null, options?: string | undefined | null)
+  setCookie(url: string, value: string): void
+  cookies(url: string): Array<Cookie>
   clearCookies(): void
   request(method: string, url: string, headers?: Array<Header> | undefined | null, body?: Buffer | undefined | null, options?: string | undefined | null): Promise<Response>
+}
+
+export interface Cookie {
+  name: string
+  value: string
 }
 
 export interface Header {

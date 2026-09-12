@@ -69,6 +69,23 @@ async function main() {
   assert.throws(() => response.raiseForStatus(), error => error.code === 'HTTP_STATUS')
   assert.equal((await new Client({ proxy: base }).get('http://not-a-real-host.invalid/inspect')).json().path, 'http://not-a-real-host.invalid/inspect')
   assert.equal((await new Client({ verify: false }).get(tlsBase)).status, 200)
+  client.setCookie(base, 'manual=value; Path=/')
+  assert.deepEqual(client.cookies(base), [{ name: 'manual', value: 'value' }])
+  assert.equal((await client.get(base + '/cookie')).text(), 'manual=value')
+  client.setCookie(base, 'manual=gone; Path=/; Max-Age=0')
+  assert.deepEqual(client.cookies(base), [])
+  client.setCookie(base, 'secure=hidden; Secure; Path=/')
+  assert.deepEqual(client.cookies(base), [])
+  const parts = (await client.post(base + '/multipart', { multipart: [
+    { name: 'field', data: '中文' },
+    { name: 'file', data: payload, filename: 'data.bin', contentType: 'application/octet-stream' },
+  ] })).json()
+  assert.equal(parts[0].name, 'field')
+  assert.equal(Buffer.from(parts[0].data, 'base64').toString(), '中文')
+  assert.equal(parts[1].filename, 'data.bin')
+  assert.deepEqual(Buffer.from(parts[1].data, 'base64'), payload)
+  await assert.rejects(client.post(base, { multipart: [], json: {} }), /INVALID_REQUEST/)
+  await assert.rejects(client.get(base, { headers: { Authorization: 'custom' }, bearerToken: 'token' }), /INVALID_REQUEST/)
   if (https) assert.equal((await client.request('GET', 'https://example.com')).status, 200)
   console.log('Node integration checks passed')
 }

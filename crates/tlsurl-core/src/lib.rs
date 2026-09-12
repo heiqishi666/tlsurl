@@ -4,6 +4,17 @@ use std::{fmt, sync::Arc, time::Duration};
 
 use futures_util::StreamExt;
 use serde::Deserialize;
+use wreq::cookie::IntoCookie;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MultipartPart {
+    pub name: String,
+    pub offset: usize,
+    pub length: usize,
+    pub filename: Option<String>,
+    pub content_type: Option<String>,
+}
 
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -27,6 +38,7 @@ pub struct RequestOptions {
     pub max_redirects: Option<u32>,
     pub basic_auth: Option<(String, String)>,
     pub bearer_token: Option<String>,
+    pub multipart: Option<Vec<MultipartPart>>,
 }
 
 pub fn parse_options<T: serde::de::DeserializeOwned + Default>(
@@ -176,6 +188,25 @@ impl Client {
         self.jar.clear();
     }
 
+    pub fn set_cookie(&self, url: &str, value: &str) -> Result<(), Error> {
+        let url = http_url(url)?;
+        let cookie = value.into_cookie().ok_or_else(|| Error {
+            code: "INVALID_REQUEST",
+            message: "invalid Set-Cookie value".into(),
+        })?;
+        self.jar.add(cookie, url.as_str());
+        Ok(())
+    }
+
+    pub fn cookies(&self, url: &str) -> Result<Vec<(String, String)>, Error> {
+        let url = http_url(url)?;
+        Ok(self
+            .jar
+            .matches(url.as_str())
+            .map(|c| (c.name().to_owned(), c.value().to_owned()))
+            .collect())
+    }
+
     pub async fn request(
         &self,
         method: String,
@@ -199,16 +230,7 @@ impl Client {
             code: "INVALID_REQUEST",
             message: error.to_string(),
         })?;
-        let mut url = url::Url::parse(&url).map_err(|_| Error {
-            code: "INVALID_REQUEST",
-            message: "invalid absolute URL".into(),
-        })?;
-        if !matches!(url.scheme(), "http" | "https") {
-            return Err(Error {
-                code: "INVALID_REQUEST",
-                message: "only http and https URLs are supported".into(),
-            });
-        }
+        let mut url = http_url(&url)?;
         if !options.params.is_empty() {
             url.query_pairs_mut().extend_pairs(options.params);
         }
@@ -248,7 +270,28 @@ impl Client {
             request = request.header(name, value);
         }
         request = request.orig_headers(original_headers);
-        if let Some(body) = body {
+        if let Some(parts) = options.multipart {
+            let data = body.unwrap_or_default();
+            let mut form = wreq::multipart::Form::new();
+            for descriptor in parts {
+                let end = descriptor.offset.checked_add(descriptor.length);
+                let bytes = end
+                    .and_then(|end| data.get(descriptor.offset..end))
+                    .ok_or_else(|| Error {
+                        code: "INVALID_REQUEST",
+                        message: "invalid multipart byte range".into(),
+                    })?;
+                let mut part = wreq::multipart::Part::bytes(bytes.to_vec());
+                if let Some(filename) = descriptor.filename {
+                    part = part.file_name(filename);
+                }
+                if let Some(content_type) = descriptor.content_type {
+                    part = part.mime_str(&content_type)?;
+                }
+                form = form.part(descriptor.name, part);
+            }
+            request = request.multipart(form);
+        } else if let Some(body) = body {
             request = request.body(body);
         }
         let response = request.send().await?;
@@ -278,4 +321,18 @@ impl Client {
             body,
         })
     }
+}
+
+fn http_url(value: &str) -> Result<url::Url, Error> {
+    let url = url::Url::parse(value).map_err(|_| Error {
+        code: "INVALID_REQUEST",
+        message: "invalid absolute URL".into(),
+    })?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(Error {
+            code: "INVALID_REQUEST",
+            message: "only http and https URLs are supported".into(),
+        });
+    }
+    Ok(url)
 }

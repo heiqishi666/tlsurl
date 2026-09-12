@@ -57,6 +57,14 @@ impl Client {
         })
     }
 
+    fn set_cookie(&self, url: &str, value: &str) -> PyResult<()> {
+        self.inner.set_cookie(url, value).map_err(py_error)
+    }
+
+    fn cookies(&self, url: &str) -> PyResult<Vec<(String, String)>> {
+        self.inner.cookies(url).map_err(py_error)
+    }
+
     fn clear_cookies(&self) {
         self.inner.clear_cookies();
     }

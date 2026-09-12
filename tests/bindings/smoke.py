@@ -10,6 +10,8 @@ import tempfile
 import textwrap
 import threading
 import time
+from email import policy
+from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -39,7 +41,15 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(0.25)
         status = 200
         headers = [("X-Duplicate", "one"), ("X-Duplicate", "two")]
-        if urlsplit(self.path).path == "/inspect":
+        if self.path == "/multipart":
+            message = BytesParser(policy=policy.default).parsebytes(
+                b"Content-Type: " + self.headers["Content-Type"].encode() + b"\r\n\r\n" + body)
+            body = json.dumps([{"name": part.get_param("name", header="content-disposition"),
+                                "filename": part.get_filename(),
+                                "type": part.get_content_type(),
+                                "data": base64.b64encode(part.get_payload(decode=True)).decode()}
+                               for part in message.iter_parts()]).encode()
+        elif urlsplit(self.path).path == "/inspect":
             body = json.dumps({"path": self.path, "body": body.decode(),
                                "authorization": self.headers.get("Authorization"),
                                "content_type": self.headers.get("Content-Type"),
@@ -125,6 +135,22 @@ def check_sync(base):
         raise AssertionError("HTTP status error missing")
     # This fixture acts as a forward proxy; the invalid destination must never be resolved.
     assert tlsurl.Client(proxy=base).get("http://not-a-real-host.invalid/inspect").json()["path"] == "http://not-a-real-host.invalid/inspect"
+    client.set_cookie(base, "manual=value; Path=/")
+    assert client.cookies(base) == [("manual", "value")]
+    assert client.get(base + "/cookie").text() == "manual=value"
+    client.set_cookie(base, "manual=gone; Path=/; Max-Age=0")
+    assert client.cookies(base) == []
+    client.set_cookie(base, "secure=hidden; Secure; Path=/")
+    assert client.cookies(base) == []
+    response = client.post(base + "/multipart", multipart=[
+        {"name": "field", "data": "中文"},
+        {"name": "file", "data": bytes(range(256)), "filename": "data.bin", "content_type": "application/octet-stream"},
+    ])
+    parts = response.json()
+    assert parts[0]["name"] == "field" and base64.b64decode(parts[0]["data"]) == "中文".encode()
+    assert parts[1]["filename"] == "data.bin" and base64.b64decode(parts[1]["data"]) == bytes(range(256))
+    expect_error(lambda: client.post(base, multipart=[], json={}), "INVALID_REQUEST")
+    expect_error(lambda: client.get(base, headers={"Authorization": "custom"}, bearer_token="token"), "INVALID_REQUEST")
 
 
 async def check_async(base):

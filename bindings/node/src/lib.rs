@@ -2,6 +2,12 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 #[napi(object)]
+pub struct Cookie {
+    pub name: String,
+    pub value: String,
+}
+
+#[napi(object)]
 pub struct Header {
     pub name: String,
     pub value: Buffer,
@@ -47,6 +53,26 @@ impl Client {
             )
             .map_err(|error| Error::from_reason(error.to_string()))?,
         })
+    }
+
+    #[napi]
+    pub fn set_cookie(&self, url: String, value: String) -> Result<()> {
+        self.inner
+            .set_cookie(&url, &value)
+            .map_err(|error| Error::from_reason(error.to_string()))
+    }
+
+    #[napi]
+    pub fn cookies(&self, url: String) -> Result<Vec<Cookie>> {
+        self.inner
+            .cookies(&url)
+            .map(|cookies| {
+                cookies
+                    .into_iter()
+                    .map(|(name, value)| Cookie { name, value })
+                    .collect()
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))
     }
 
     #[napi]
