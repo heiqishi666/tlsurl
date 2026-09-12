@@ -75,17 +75,19 @@ async def check_async(base):
             else:
                 raise AssertionError("request cancellation did not propagate")
             await asyncio.to_thread(state, base, identifier, lambda s: s and s["closed"])
-        response = await client.stream("GET", f"{base}/hold?id=py-asynccancel")
-        pending = asyncio.create_task(response.next_chunk_async())
-        await asyncio.sleep(0.05)
-        pending.cancel()
-        try:
-            await pending
-        except asyncio.CancelledError:
-            pass
-        else:
-            raise AssertionError("stream cancellation did not propagate")
-        await asyncio.to_thread(state, base, "py-asynccancel", lambda s: s and s["closed"])
+        for attempt in range(20):
+            response = await client.stream("GET", f"{base}/hold?id=py-asynccancel-{attempt}")
+            pending = asyncio.create_task(response.next_chunk_async())
+            await asyncio.sleep(0 if attempt % 2 == 0 else 0.005)
+            pending.cancel()
+            try:
+                await pending
+            except asyncio.CancelledError:
+                pass
+            else:
+                raise AssertionError("stream cancellation did not propagate")
+            await asyncio.to_thread(state, base, f"py-asynccancel-{attempt}", lambda s: s and s["closed"])
+
 
 
 def main():

@@ -37,7 +37,8 @@ impl StreamResponse {
             *body = None;
             return Err(cancelled());
         }
-        let Some(stream) = body.as_mut() else {
+        // The pending read owns the body, so dropping the future drops the transport.
+        let Some(mut stream) = body.take() else {
             return Ok(None);
         };
         let result = tokio::select! {
@@ -45,8 +46,11 @@ impl StreamResponse {
             _ = self.cancellation.cancelled() => Err(cancelled()),
             chunk = stream.next() => chunk.transpose().map(|chunk| chunk.map(|b| b.to_vec())).map_err(Error::from),
         };
-        if !matches!(result, Ok(Some(_))) {
-            *body = None;
+        if self.cancellation.is_cancelled() {
+            return Err(cancelled());
+        }
+        if matches!(result, Ok(Some(_))) {
+            *body = Some(stream);
         }
         result
     }
@@ -73,5 +77,36 @@ pub async fn cancellable<T>(
         biased;
         _ = token.cancelled() => Err(cancelled()),
         result = future => result,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn dropping_pending_read_releases_body_even_before_close_is_observed() {
+        for explicit_close in [false, true] {
+            let response = StreamResponse::new(
+                Response {
+                    status: 200,
+                    http_version: "1.1".into(),
+                    url: String::new(),
+                    headers: Vec::new(),
+                    body: Vec::new(),
+                },
+                futures_util::stream::pending().boxed(),
+            );
+            let mut read = Box::pin(response.next_chunk());
+            assert!(futures_util::poll!(read.as_mut()).is_pending());
+            if explicit_close {
+                response.close();
+            }
+            drop(read);
+            assert!(
+                response.body.lock().await.is_none(),
+                "cancelled read retained the body"
+            );
+        }
     }
 }
