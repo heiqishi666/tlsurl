@@ -155,7 +155,7 @@ try {
 
 response.close() 幂等，唤醒等待中的读取并释放正文；关闭后的读取返回 CANCELLED。EOF 前的并发读取会串行执行，但应用应使用一个消费者以保持处理顺序。Rust 核心按调用拉取数据，没有持续读取正文的应用层后台队列；HTTP/TLS/内核仍有正常协议缓冲。用户自己累计 chunk 或保留未关闭的响应仍会占用内存/连接。
 
-`tests/bindings/stream.py` 验证完整二进制流、超过缓冲上限的流式下载、128 MiB 响应暂停消费后的背压、提前关闭/取消后的服务端连接关闭、正文超时及重复取消。文件上传见下一节，WebSocket 尚未实现。
+`tests/bindings/stream.py` 验证完整二进制流、超过缓冲上限的流式下载、128 MiB 响应暂停消费后的背压、提前关闭/取消后的服务端连接关闭、正文超时及重复取消。文件上传与 WebSocket 见后续章节。
 
 ## 文件流式上传
 
@@ -166,6 +166,39 @@ Rust 异步打开文件，按下游需要读取，每次最多 64 KiB；语言�
 文件正文不可重放：当前收到需要保留正文的 307/308 重定向时返回该响应，不自动重新打开/上传文件；调用者可检查目标后显式发起新请求。取消会释放请求与文件读取资源，语义与前一节一致。任意 Python/Node 生成器上传尚未开放。
 
 `tests/bindings/upload.py` 验证实包上传的字节数与 SHA-256、空文件、混合 Multipart、冲突配置、缺失文件、307 行为和 128 MiB 文件取消。Node 用例还检查上传开始后的 RSS 增量小于 64 MiB，防止退化为整文件缓冲；这不是所有业务负载的内存上限承诺。
+
+## WebSocket
+
+Python `Client.websocket(url, ...)` 返回同步 WebSocket；`await AsyncClient.websocket(url, ...)` 返回 AsyncWebSocket。Node 使用 `await client.websocket(url, options)`。仅接受 ws/wss，当前使用 HTTP/1.1 Upgrade；TLS 信任、代理、Cookie 和客户端预设复用同一 Rust 客户端，不宣称已验证 HTTP/2 Extended CONNECT。
+
+连接选项：headers、protocols、timeout_ms/timeoutMs（握手超时）、operation_timeout_ms/operationTimeoutMs（每次收发及关闭握手超时，默认 30000）、max_message_bytes/maxMessageBytes（收发消息上限，默认 16 MiB）。Node 还接受 signal，连接前后均可取消。
+
+`send(str)` 发送文本，`send(bytes/Uint8Array)` 发送二进制。`recv()` 返回含 kind、data、code 的消息：kind 为 text/binary/ping/pong/close，data 始终为原始字节，code 仅用于关闭消息。Python 使用 `message.data.decode()`，Node 使用 `message.data.toString()` 读取文本。protocol 属性为协商结果。异步连接的 send/recv/ping/pong/close 均须 await。
+
+```python
+async with AsyncClient() as client:
+    async with await client.websocket("wss://example.org/socket", protocols=["chat"]) as socket:
+        await socket.send("hello")
+        message = await socket.recv()
+```
+
+```javascript
+const socket = await client.websocket('wss://example.org/socket', {protocols: ['chat']})
+try {
+  await socket.send('hello')
+  const message = await socket.recv()
+} finally {
+  await socket.close()
+}
+```
+
+接收与发送独立串行化，可以先等待 recv 再从同一连接发送，不会因读锁阻塞发送。一次只应安排一个消息消费者。Python 支持同步/异步迭代，Node 支持 for-await；提前退出 Python 迭代时配合上下文管理保证及时关闭。
+
+ping/pong 控制负载最多 125 字节；接收到 Ping 会立即刷新自动 Pong。close(code=1000, reason="") 发起并等待关闭握手，在操作超时内完成或报 TIMEOUT，并释放连接；reason 最多 123 个 UTF-8 字节。关闭会中断等待中的 recv，返回 CLOSED。收到远端 Close 后返回带关闭码的最后消息并释放连接。
+
+abort() 立即释放连接，等待中的操作返回 CANCELLED。Python asyncio 取消收发会 abort；Node 使用建立连接时传入的 AbortSignal。关闭 Client 不强制关闭已交出的 WebSocket，调用者拥有该连接，必须通过上下文管理、close 或 abort 释放。
+
+`tests/bindings/websocket.py` 使用固定版本的 [ws 测试服务](https://github.com/websockets/ws)（仅测试依赖，不进入分发包），验证 WS/WSS、自定义 CA、Cookie/子协议、文本/二进制/分片、双向收发、Ping/Pong、关闭握手、大小限制、超时及取消。运行前执行 `npm ci --prefix tests/bindings --ignore-scripts --omit=optional`。
 
 ## 构建
 
