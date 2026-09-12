@@ -82,6 +82,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: python scripts/build_native.py
+      - name: Audit native artifacts
+        if: runner.os != 'Windows'
+        run: python scripts/audit_native.py --artifacts dist --output dist/audit/native-audit-${{ matrix.platform.target }}.json
+      - name: Audit Windows native artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python scripts/audit_native.py --artifacts dist --output dist/audit/native-audit-${{ matrix.platform.target }}.json
       - name: Core cancellation regressions
         if: runner.os != 'Windows'
         run: cargo test --release --locked -p tlsurl-core --lib
@@ -107,6 +114,7 @@ jobs:
           path: |
             dist/wheels/*.whl
             dist/npm/*.tgz
+            dist/audit/*.json
           if-no-files-found: error
 
   collect:
@@ -122,6 +130,7 @@ jobs:
         with:
           pattern: tlsurl-*
           path: dist/download
+      - run: python tests/bindings/test_audit.py
       - run: python scripts/collect_native.py --source dist/download --destination dist/release
       - uses: actions/upload-artifact@v4
         with:

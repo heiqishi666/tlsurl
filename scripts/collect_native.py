@@ -21,11 +21,28 @@ def collect(source, destination):
     platforms = set()
     wheels = set()
     selected = {}
+    source_commit = None
     for group in groups:
         archives = list(group.rglob("*.tgz"))
         group_wheels = list(group.rglob("*.whl"))
         if len(archives) != 2 or len(group_wheels) != 1:
             raise ValueError(f"incomplete artifacts: {group}")
+        audits = list(group.rglob("native-audit-*.json"))
+        if len(audits) != 1:
+            raise ValueError(f"expected one native audit: {group}")
+        audit = json.loads(audits[0].read_text(encoding="utf-8"))
+        commit = audit.get("git_commit")
+        if not commit or (source_commit is not None and source_commit != commit):
+            raise ValueError("audits must refer to the same source commit")
+        source_commit = commit
+        if audit.get("schema") != 1 or {item["language"] for item in audit["binaries"]} != {"python", "node"} or len(audit["binaries"]) != 2:
+            raise ValueError("incomplete audit report")
+        by_name = {path.name: path for path in [*archives, *group_wheels]}
+        for item in audit["binaries"]:
+            path = by_name.get(item["archive"])
+            if path is None or hashlib.sha256(path.read_bytes()).hexdigest() != item["archive_sha256"]:
+                raise ValueError("audit does not match packaged artifact")
+        selected[audits[0].name] = audits[0]
         for archive in archives:
             files = contents(archive)
             manifest = json.loads(files["package/package.json"])
