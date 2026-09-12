@@ -21,6 +21,7 @@ function serve(options) {
         tlsVersion: req.socket.getProtocol(), alpn: req.socket.alpnProtocol,
         authorized: req.socket.authorized, httpVersion: req.httpVersion,
         cipher: req.socket.getCipher().name, headers: Object.keys(req.headers),
+        userAgent: req.headers['user-agent'],
         settings: req.stream?.session.remoteSettings,
       })
       res.writeHead(200, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) })

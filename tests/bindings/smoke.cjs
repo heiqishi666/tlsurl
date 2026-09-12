@@ -86,6 +86,12 @@ async function main() {
   assert.deepEqual(Buffer.from(parts[1].data, 'base64'), payload)
   await assert.rejects(client.post(base, { multipart: [], json: {} }), /INVALID_REQUEST/)
   await assert.rejects(client.get(base, { headers: { Authorization: 'custom' }, bearerToken: 'token' }), /INVALID_REQUEST/)
+  for (const encoding of ['gzip', 'deflate', 'br', 'zstd']) {
+    assert.deepEqual((await client.get(base + '/' + encoding)).body, Buffer.alloc(2048, 'x'))
+    await assert.rejects(new Client({ maxResponseBytes: 1024 }).get(base + '/' + encoding), /BODY_TOO_LARGE/)
+  }
+  assert.deepEqual((await new Client({ decompress: false }).get(base + '/gzip')).body.subarray(0, 2), Buffer.from([31, 139]))
+  await assert.rejects(new Client({ maxResponseBytes: 1024 }).get(base + '/gzip'), /BODY_TOO_LARGE/)
   if (https) assert.equal((await client.request('GET', 'https://example.com')).status, 200)
   console.log('Node integration checks passed')
 }

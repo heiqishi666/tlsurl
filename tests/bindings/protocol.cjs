@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { Client } = require(process.argv[2])
+const { Client, availableProfiles } = require(process.argv[2])
 const ports = JSON.parse(process.argv[3])
 const read = name => fs.readFileSync(path.join(__dirname, 'certs', name), 'utf8')
 const caPem = read('ca.pem')
@@ -34,6 +34,20 @@ async function main() {
   await assert.rejects(new Client({ timeoutMs: 2000, caPem }).get(mtls))
   assert.equal((await new Client({ caPem, identity: { certificatePem: read('client.pem'),
     privateKeyPem: read('client-key.pem') } }).get(mtls)).json().authorized, true)
+  const profiles = availableProfiles()
+  assert.equal(new Set(profiles).size, profiles.length)
+  for (const profile of ['chrome_149', 'firefox_151', 'safari_26.4']) {
+    assert(profiles.includes(profile))
+    assert.equal((await new Client({ caPem, profile }).get(normal)).httpVersion, '2')
+  }
+  const chrome = (await new Client({ caPem, profile: 'chrome_149', platform: 'windows',
+    http2: { initialWindowSize: 777777 }, tls: { maxVersion: '1.2' } }).get(normal)).json()
+  assert(chrome.userAgent.includes('Chrome/149'))
+  assert.equal(chrome.tlsVersion, 'TLSv1.2')
+  assert.equal(chrome.settings.initialWindowSize, 777777)
+  assert.equal(chrome.settings.headerTableSize, 65536)
+  assert.throws(() => new Client({ profile: 'not_a_browser' }), /INVALID_CONFIG/)
+  assert.throws(() => new Client({ platform: 'windows' }), /INVALID_CONFIG/)
   console.log('Node TLS trust, hostname, version, ALPN, cipher, mTLS and HTTP/2 wire checks passed')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

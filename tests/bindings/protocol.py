@@ -50,6 +50,19 @@ def check(ports):
     identity = {"certificate_pem": (certs / "client.pem").read_text(),
                 "private_key_pem": (certs / "client-key.pem").read_text()}
     assert tlsurl.Client(ca_pem=ca, identity=identity).get(mtls).json()["authorized"] is True
+    profiles = tlsurl.available_profiles()
+    assert len(profiles) == len(set(profiles)) and "chrome_149" in profiles
+    for profile in ("chrome_149", "firefox_151", "safari_26.4"):
+        assert profile in profiles
+        assert tlsurl.Client(ca_pem=ca, profile=profile).get(normal).http_version == "2"
+    chrome = tlsurl.Client(ca_pem=ca, profile="chrome_149", platform="windows",
+                          http2={"initial_window_size": 777777}, tls={"max_version": "1.2"}).get(normal).json()
+    assert "Chrome/149" in chrome["userAgent"], chrome
+    assert chrome["tlsVersion"] == "TLSv1.2"
+    assert chrome["settings"]["initialWindowSize"] == 777777
+    assert chrome["settings"]["headerTableSize"] == 65536, chrome
+    rejected(lambda: tlsurl.Client(profile="not_a_browser"))
+    rejected(lambda: tlsurl.Client(platform="windows"))
     print("Python TLS trust, hostname, version, ALPN, cipher, mTLS and HTTP/2 wire checks passed")
 
 
