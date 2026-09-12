@@ -87,7 +87,9 @@ jobs:
           python -m pip install --no-index --only-binary=:all: --find-links dist/wheels tlsurl
           python tests/bindings/install_npm.py --artifacts dist/npm --consumer dist/consumer
       - name: Test installed packages
-        run: python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl --https
+        run: |
+          python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl --https
+          python tests/bindings/protocol.py --node-module dist/consumer/node_modules/tlsurl
       - uses: actions/upload-artifact@v4
         with:
           name: tlsurl-${{ matrix.platform.target }}
@@ -160,6 +162,7 @@ jobs:
           node --version
           python tests/bindings/install_npm.py --artifacts dist/release --consumer dist/node22
           python tests/bindings/smoke.py --node-module dist/node22/node_modules/tlsurl --https
+          python tests/bindings/protocol.py --node-module dist/node22/node_modules/tlsurl
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -168,3 +171,4 @@ jobs:
           node --version
           python tests/bindings/install_npm.py --artifacts dist/release --consumer dist/node24
           python tests/bindings/smoke.py --node-module dist/node24/node_modules/tlsurl --https
+          python tests/bindings/protocol.py --node-module dist/node24/node_modules/tlsurl
