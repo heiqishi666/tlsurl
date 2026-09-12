@@ -12,6 +12,8 @@ import subprocess
 import tempfile
 import threading
 
+from node_runtime import node_executable
+
 import tlsurl
 from stream import state
 
@@ -71,7 +73,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--node-module", required=True)
     args = parser.parse_args()
-    server = subprocess.Popen(["node", str(Path(__file__).with_name("stream_server.cjs"))], stdout=subprocess.PIPE, text=True)
+    server = subprocess.Popen([node_executable(), str(Path(__file__).with_name("stream_server.cjs"))], stdout=subprocess.PIPE, text=True)
     ready = queue.Queue()
     threading.Thread(target=lambda: ready.put(server.stdout.readline()), daemon=True).start()
     try:
@@ -84,7 +86,7 @@ def main():
                 output.truncate(128 * 1024 * 1024)
             check_sync(base, directory)
             asyncio.run(check_async(base, directory))
-            subprocess.run(["node", str(Path(__file__).with_name("upload.cjs")), base, str(Path(args.node_module).resolve()), temporary], check=True, timeout=60)
+            subprocess.run([node_executable(), str(Path(__file__).with_name("upload.cjs")), base, str(Path(args.node_module).resolve()), temporary], check=True, timeout=60)
         print("Python sync/async raw/multipart file upload and cancellation checks passed")
     finally:
         server.terminate()

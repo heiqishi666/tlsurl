@@ -1,10 +1,18 @@
 const http = require('node:http')
 const crypto = require('node:crypto')
 const states = new Map()
+const sockets = new Set()
+let connections = 0
+let requests = 0
 const block = Buffer.from(Array.from({ length: 32768 }, (_, i) => i % 256))
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost')
   const id = url.searchParams.get('id')
+  if (url.pathname === '/metrics') {
+    res.end(JSON.stringify({ activeConnections: sockets.size, connections, requests }))
+    return
+  }
+  requests++
   if (url.pathname === '/state') {
     res.end(JSON.stringify(states.get(id) || null))
     return
@@ -59,5 +67,10 @@ const server = http.createServer((req, res) => {
     if (!res.destroyed) { state.finished = true; res.end() }
   }
   write()
+})
+server.on('connection', socket => {
+  connections++
+  sockets.add(socket)
+  socket.on('close', () => sockets.delete(socket))
 })
 server.listen(0, '127.0.0.1', () => console.log(JSON.stringify({ port: server.address().port })))

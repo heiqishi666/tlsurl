@@ -6,6 +6,8 @@ import queue
 import subprocess
 import threading
 
+from node_runtime import node_executable
+
 import tlsurl
 
 
@@ -70,14 +72,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--node-module", required=True)
     args = parser.parse_args()
-    server = subprocess.Popen(["node", str(Path(__file__).with_name("protocol_server.cjs"))],
+    server = subprocess.Popen([node_executable(), str(Path(__file__).with_name("protocol_server.cjs"))],
                               stdout=subprocess.PIPE, text=True)
     try:
         ready = queue.Queue()
         threading.Thread(target=lambda: ready.put(server.stdout.readline()), daemon=True).start()
         ports = json.loads(ready.get(timeout=15))
         check(ports)
-        subprocess.run(["node", str(Path(__file__).with_name("protocol.cjs")),
+        subprocess.run([node_executable(), str(Path(__file__).with_name("protocol.cjs")),
                         str(Path(args.node_module).resolve()), json.dumps(ports)], check=True, timeout=60)
     finally:
         server.terminate()

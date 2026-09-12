@@ -7,6 +7,8 @@ import queue
 import subprocess
 import threading
 
+from node_runtime import node_executable
+
 import tlsurl
 from stream import state
 
@@ -125,7 +127,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--node-module", required=True)
     args = parser.parse_args()
-    server = subprocess.Popen(["node", str(Path(__file__).with_name("websocket_server.cjs"))], stdout=subprocess.PIPE, text=True)
+    server = subprocess.Popen([node_executable(), str(Path(__file__).with_name("websocket_server.cjs"))], stdout=subprocess.PIPE, text=True)
     ready = queue.Queue()
     threading.Thread(target=lambda: ready.put(server.stdout.readline()), daemon=True).start()
     try:
@@ -134,7 +136,7 @@ def main():
         secure = f"wss://localhost:{ports['tlsPort']}"
         check_sync(base, secure)
         asyncio.run(check_async(base))
-        subprocess.run(["node", str(Path(__file__).with_name("websocket.cjs")), base, secure, str(Path(args.node_module).resolve())], check=True, timeout=60)
+        subprocess.run([node_executable(), str(Path(__file__).with_name("websocket.cjs")), base, secure, str(Path(args.node_module).resolve())], check=True, timeout=60)
         print("Python sync/async WS/WSS, frames, duplex, close, limits and cancellation checks passed")
     finally:
         server.terminate()

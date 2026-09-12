@@ -9,6 +9,8 @@ import threading
 import time
 from urllib.request import urlopen
 
+from node_runtime import node_executable
+
 import tlsurl
 
 
@@ -94,14 +96,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--node-module", required=True)
     args = parser.parse_args()
-    server = subprocess.Popen(["node", str(Path(__file__).with_name("stream_server.cjs"))], stdout=subprocess.PIPE, text=True)
+    server = subprocess.Popen([node_executable(), str(Path(__file__).with_name("stream_server.cjs"))], stdout=subprocess.PIPE, text=True)
     ready = queue.Queue()
     threading.Thread(target=lambda: ready.put(server.stdout.readline()), daemon=True).start()
     try:
         base = f"http://127.0.0.1:{json.loads(ready.get(timeout=15))['port']}"
         check_sync(base)
         asyncio.run(check_async(base))
-        subprocess.run(["node", str(Path(__file__).with_name("stream.cjs")), base, str(Path(args.node_module).resolve())], check=True, timeout=60)
+        subprocess.run([node_executable(), str(Path(__file__).with_name("stream.cjs")), base, str(Path(args.node_module).resolve())], check=True, timeout=60)
         print("Python sync/async streaming, backpressure and transport cancellation checks passed")
     finally:
         server.terminate()
