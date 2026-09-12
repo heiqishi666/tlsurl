@@ -42,7 +42,8 @@ export interface Header { name: string; value: string | Uint8Array }
 export type Pairs = [string, string][] | Record<string, string>
 export interface MultipartPart {
   name: string
-  data: string | Uint8Array
+  data?: string | Uint8Array
+  file?: string
   filename?: string
   contentType?: string
 }
@@ -50,6 +51,7 @@ export interface RequestOptions {
   signal?: AbortSignal
   headers?: Header[] | Record<string, string | Uint8Array>
   body?: string | Uint8Array
+  bodyFile?: string
   json?: unknown
   form?: Pairs
   params?: Pairs

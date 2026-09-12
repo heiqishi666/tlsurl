@@ -98,10 +98,10 @@ class Client {
     if (!this._native) throw new TlsurlError('CLOSED', 'client is closed')
     const options = Array.isArray(headersOrOptions) || headersOrOptions == null
       ? { headers: headersOrOptions || [], body: legacyBody } : headersOrOptions
-    const { headers = [], body: rawBody, json, form, multipart, params, signal, ...rest } = options
+    const { headers = [], body: rawBody, json, form, multipart, bodyFile, params, signal, ...rest } = options
     const hasJson = Object.hasOwn(options, 'json')
-    if ([rawBody !== undefined && rawBody !== null, hasJson, form !== undefined && form !== null, multipart != null].filter(Boolean).length > 1) {
-      throw new TlsurlError('INVALID_REQUEST', 'body, json, form and multipart are mutually exclusive')
+    if ([rawBody !== undefined && rawBody !== null, hasJson, form !== undefined && form !== null, multipart != null, bodyFile != null].filter(Boolean).length > 1) {
+      throw new TlsurlError('INVALID_REQUEST', 'body, json, form, multipart and bodyFile are mutually exclusive')
     }
     const normalized = (Array.isArray(headers) ? headers : Object.entries(headers).map(([name, value]) => ({ name, value })))
       .map(({ name, value }) => ({ name, value: Buffer.from(value) }))
@@ -117,11 +117,14 @@ class Client {
     if (contentType && !normalized.some(h => h.name.toLowerCase() === 'content-type')) normalized.push({ name: 'Content-Type', value: Buffer.from(contentType) })
     const requestOptions = optionsJson(rest, requestKeys)
     if (params != null) requestOptions.params = pairs(params)
+    if (bodyFile != null) requestOptions.body_file = bodyFile
     if (multipart != null) {
       const chunks = []
       let offset = 0
       requestOptions.multipart = multipart.map(part => {
-        if (Object.keys(part).some(key => !['name', 'data', 'filename', 'contentType'].includes(key))) throw new TlsurlError('INVALID_REQUEST', 'unknown multipart field')
+        if (Object.keys(part).some(key => !['name', 'data', 'file', 'filename', 'contentType'].includes(key))) throw new TlsurlError('INVALID_REQUEST', 'unknown multipart field')
+        if ((part.data != null) === (part.file != null)) throw new TlsurlError('INVALID_REQUEST', 'multipart requires exactly one of data or file')
+        if (part.file != null) return { name: part.name, file: part.file, filename: part.filename, content_type: part.contentType }
         const chunk = Buffer.from(part.data)
         const descriptor = { name: part.name, offset, length: chunk.length, filename: part.filename, content_type: part.contentType }
         offset += chunk.length

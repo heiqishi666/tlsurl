@@ -1,6 +1,7 @@
 """Precompiled HTTP clients with shared Rust request semantics."""
 
 import json as _json
+from os import fspath
 from urllib.parse import urlencode
 
 from . import _native
@@ -119,12 +120,12 @@ def _pairs(value):
     return list(value.items()) if hasattr(value, "items") else list(value)
 
 
-def _prepare(headers, body, *, params=None, json=_UNSET, form=None, multipart=None,
+def _prepare(headers, body, *, params=None, json=_UNSET, form=None, multipart=None, body_file=None,
              basic_auth=None, bearer_token=None, timeout_ms=None, max_redirects=None):
     headers = [(name, value.encode("utf-8") if isinstance(value, str) else bytes(value))
                for name, value in _pairs(headers or [])]
-    if sum([body is not None, json is not _UNSET, form is not None, multipart is not None]) > 1:
-        raise Error("INVALID_REQUEST", "body, json, form and multipart are mutually exclusive")
+    if sum([body is not None, json is not _UNSET, form is not None, multipart is not None, body_file is not None]) > 1:
+        raise Error("INVALID_REQUEST", "body, json, form, multipart and body_file are mutually exclusive")
     content_type = None
     if json is not _UNSET:
         body = _json.dumps(json, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode()
@@ -141,12 +142,20 @@ def _prepare(headers, body, *, params=None, json=_UNSET, form=None, multipart=No
                         ("timeout_ms", timeout_ms), ("max_redirects", max_redirects)):
         if value is not None:
             options[name] = value
+    if body_file is not None:
+        options["body_file"] = fspath(body_file)
     if multipart is not None:
         chunks, parts, offset = [], [], 0
         for part in multipart:
-            unknown = set(part) - {"name", "data", "filename", "content_type"}
+            unknown = set(part) - {"name", "data", "file", "filename", "content_type"}
             if unknown:
                 raise Error("INVALID_REQUEST", "unknown multipart field")
+            if (part.get("data") is not None) == (part.get("file") is not None):
+                raise Error("INVALID_REQUEST", "multipart requires exactly one of data or file")
+            if part.get("file") is not None:
+                parts.append({"name": part["name"], "file": fspath(part["file"]),
+                              "filename": part.get("filename"), "content_type": part.get("content_type")})
+                continue
             data = part["data"]
             data = data.encode() if isinstance(data, str) else bytes(data)
             parts.append({"name": part["name"], "offset": offset, "length": len(data),

@@ -7,14 +7,18 @@ use serde::Deserialize;
 use wreq::cookie::IntoCookie;
 mod protocol;
 pub mod stream;
+mod upload;
 pub use stream::StreamResponse;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MultipartPart {
     pub name: String,
+    #[serde(default)]
     pub offset: usize,
+    #[serde(default)]
     pub length: usize,
+    pub file: Option<String>,
     pub filename: Option<String>,
     pub content_type: Option<String>,
 }
@@ -42,6 +46,7 @@ pub struct ClientOptions {
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RequestOptions {
+    pub body_file: Option<String>,
     pub params: Vec<(String, String)>,
     pub timeout_ms: Option<u32>,
     pub max_redirects: Option<u32>,
@@ -334,6 +339,28 @@ impl Client {
         if let Some(token) = options.bearer_token {
             request = request.bearer_auth(token);
         }
+        if options.body_file.is_some() && (body.is_some() || options.multipart.is_some()) {
+            return Err(Error {
+                code: "INVALID_REQUEST",
+                message: "body_file conflicts with another request body".into(),
+            });
+        }
+        let has_files = options.body_file.is_some()
+            || options
+                .multipart
+                .as_ref()
+                .is_some_and(|parts| parts.iter().any(|part| part.file.is_some()));
+        if has_files
+            && headers.iter().any(|(name, _)| {
+                name.eq_ignore_ascii_case("content-length")
+                    || name.eq_ignore_ascii_case("transfer-encoding")
+            })
+        {
+            return Err(Error {
+                code: "INVALID_REQUEST",
+                message: "file upload framing is managed by the client".into(),
+            });
+        }
         let has_headers = !headers.is_empty();
         let mut original_headers = wreq::header::OrigHeaderMap::new();
         for (name, value) in headers {
@@ -347,15 +374,33 @@ impl Client {
             let data = body.unwrap_or_default();
             let mut form = wreq::multipart::Form::new();
             for descriptor in parts {
-                let end = descriptor.offset.checked_add(descriptor.length);
-                let bytes = end
-                    .and_then(|end| data.get(descriptor.offset..end))
-                    .ok_or_else(|| Error {
-                        code: "INVALID_REQUEST",
-                        message: "invalid multipart byte range".into(),
-                    })?;
-                let mut part = wreq::multipart::Part::bytes(bytes.to_vec());
-                if let Some(filename) = descriptor.filename {
+                let filename = descriptor.filename.or_else(|| {
+                    descriptor
+                        .file
+                        .as_ref()
+                        .and_then(|path| std::path::Path::new(path).file_name())
+                        .map(|name| name.to_string_lossy().into_owned())
+                });
+                let mut part = if let Some(path) = descriptor.file {
+                    if descriptor.offset != 0 || descriptor.length != 0 {
+                        return Err(Error {
+                            code: "INVALID_REQUEST",
+                            message: "multipart file cannot include a byte range".into(),
+                        });
+                    }
+                    let (body, length) = upload::file_body(&path).await?;
+                    wreq::multipart::Part::stream_with_length(body, length)
+                } else {
+                    let end = descriptor.offset.checked_add(descriptor.length);
+                    let bytes = end
+                        .and_then(|end| data.get(descriptor.offset..end))
+                        .ok_or_else(|| Error {
+                            code: "INVALID_REQUEST",
+                            message: "invalid multipart byte range".into(),
+                        })?;
+                    wreq::multipart::Part::bytes(bytes.to_vec())
+                };
+                if let Some(filename) = filename {
                     part = part.file_name(filename);
                 }
                 if let Some(content_type) = descriptor.content_type {
@@ -364,6 +409,11 @@ impl Client {
                 form = form.part(descriptor.name, part);
             }
             request = request.multipart(form);
+        } else if let Some(path) = options.body_file {
+            let (body, length) = upload::file_body(&path).await?;
+            request = request
+                .header(wreq::header::CONTENT_LENGTH, length)
+                .body(body);
         } else if let Some(body) = body {
             request = request.body(body);
         }

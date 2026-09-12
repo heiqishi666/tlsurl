@@ -10,8 +10,8 @@ wreq = { path = "../..", features = ["cookies", "stream", "socks", "multipart", 
 wreq-util = { version = "=3.0.0-rc.14", features = ["emulation-serde"] }
 futures-util = "0.3"
 bytes = "1"
-tokio = { version = "1", features = ["sync", "macros"] }
-tokio-util = { version = "0.7", features = ["rt"] }
+tokio = { version = "1", features = ["sync", "macros", "fs", "io-util"] }
+tokio-util = { version = "0.7", features = ["rt", "io"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"
