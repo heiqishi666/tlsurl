@@ -15,7 +15,7 @@
 - HTTP 4xx/5xx 返回响应；Python `Error.code`、Node `TlsurlError.code` 提供网络错误分类；通过 `raise_for_status()` / `raiseForStatus()` 显式检查 HTTP 状态。
 - Python 异步取消通过 pyo3-async-runtimes 传递；Node AbortSignal 尚未实现。
 
-指纹预设、高级 TLS/HTTP2 参数、流式读取、WebSocket、Node AbortSignal 仍待后续实现。首发范围与后续队列见 [交付规格](delivery-plan.md)。
+指纹预设、流式读取、WebSocket、Node AbortSignal 仍待后续实现。首发范围与后续队列见 [交付规格](delivery-plan.md)。
 
 ```python
 from tlsurl import Client, AsyncClient
@@ -73,6 +73,34 @@ Python Multipart 字段使用 `name/data/filename/content_type`，Node 使用 `n
 Cookie 按上游域、路径、Secure 和过期规则接受与选择；`set_cookie` 不绕过这些规则，例如从 HTTP 来源写入 Secure Cookie 会被忽略。`cookies=False` 禁止自动收发存储 Cookie，但显式 Cookie Header 仍由调用者控制。
 
 `close()` 释放客户端持有的连接池引用并拒绝新请求；已经提交的请求可继续完成。Python 支持 `with Client()` / `async with AsyncClient()`。强制取消在途请求仍属于后续生命周期阶段。
+
+## TLS / HTTP 配置
+
+Python 客户端接受 `tls={...}`、`http2={...}`、`identity={...}`；Node 接受对应对象，字段使用 camelCase。响应 `http_version` / `httpVersion` 表示实际收到的 HTTP 协议版本。
+
+| 配置 | Python 字段 | 含义 |
+| --- | --- | --- |
+| tls | min_version / max_version | 显式 TLS 版本界限，支持 1.0～1.3，最小值不得超过最大值 |
+| tls | alpn | 有序 `h2` / `http/1.1` 列表；不支持 HTTP/3 |
+| tls | cipher_list / curves_list / sigalgs_list | BoringSSL 格式的密码套件、曲线、签名算法列表 |
+| tls | grease / permute_extensions / sni | GREASE、扩展随机排列、SNI 开关 |
+| http2 | initial_window_size / initial_connection_window_size | 流和连接窗口，按协议范围检查 |
+| http2 | max_frame_size / max_header_list_size / header_table_size | 帧、Header 列表及 HPACK 表参数 |
+| http2 | enable_push / pseudo_order | 服务端推送与伪 Header 顺序；后者必须恰好包含 method/path/authority/scheme |
+| identity | certificate_pem / private_key_pem | mTLS 客户端证书链与 PKCS#8 PEM 私钥内容 |
+
+强制 `http_version="1.1"/"2"` 优先于 ALPN 列表。仅在明确指定时改变 TLS 选项；这里提供可验证的协议配置，不将任意配置宣称为真实浏览器指纹。
+
+```python
+client = Client(
+    ca_pem=ca_text,
+    tls={"min_version": "1.2", "max_version": "1.3", "alpn": ["h2", "http/1.1"]},
+    http2={"initial_window_size": 1048576, "pseudo_order": ["method", "path", "authority", "scheme"]},
+    identity={"certificate_pem": client_certificate, "private_key_pem": client_private_key},
+)
+```
+
+`tests/bindings/protocol.py` 通过本地 Node TLS/HTTP2 服务验证信任库、主机名拒绝、协议版本、ALPN、指定密码套件、mTLS、HTTP/2 SETTINGS 和伪 Header 实际顺序。测试证书仅供本地测试，不能部署到真实服务或导入系统信任库。
 
 ## 构建
 
