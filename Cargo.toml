@@ -1,3 +1,9 @@
+# Modified for tlsurl: add local bindings without changing the upstream crate API.
+[workspace]
+members = ["crates/tlsurl-core", "bindings/python", "bindings/node"]
+default-members = [".", "crates/tlsurl-core"]
+resolver = "3"
+
 [package]
 name = "wreq"
 version = "6.0.0-rc.29"

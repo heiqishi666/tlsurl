@@ -1,0 +1,13 @@
+[package]
+name = "tlsurl-core"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+wreq = { path = "../..", features = ["cookies", "stream"] }
+futures-util = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+wreq = { path = "../..", features = ["prefix-symbols"] }

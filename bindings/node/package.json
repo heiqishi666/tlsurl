@@ -1,0 +1,33 @@
+{
+  "name": "tlsurl",
+  "version": "0.1.0",
+  "description": "Rust-powered HTTP client with native Node.js bindings",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.js"
+    }
+  },
+  "files": ["index.js", "index.mjs", "index.d.ts", "*.node", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "napi build --platform --release -- --locked",
+    "artifacts": "napi artifacts",
+    "create-npm-dirs": "napi create-npm-dirs"
+  },
+  "napi": {
+    "binaryName": "tlsurl",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin"
+    ]
+  },
+  "devDependencies": { "@napi-rs/cli": "^3.0.0" }
+}

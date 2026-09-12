@@ -1,0 +1,19 @@
+{
+  "name": "tlsurl-darwin-x64",
+  "version": "0.1.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "tlsurl.darwin-x64.node",
+  "files": [
+    "tlsurl.darwin-x64.node"
+  ],
+  "description": "Rust-powered HTTP client with native Node.js bindings",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "os": [
+    "darwin"
+  ]
+}

@@ -1,4 +1,17 @@
-# wreq
+# tlsurl
+
+Rust-powered HTTP client with native Python and Node.js bindings, based on wreq.
+
+This repository adds a shared binding layer and prebuilt-package workflows. The initial
+bindings support buffered HTTP requests; browser profiles and advanced TLS/HTTP2 binding
+options are not implemented yet. Packages have not been published to PyPI or npm.
+
+See [native bindings, build instructions and compatibility](docs/native-bindings.md).
+The protocol implementation and its original documentation below are retained from upstream.
+
+<!-- Modified for tlsurl: add binding status and documentation without replacing upstream details. -->
+
+## Upstream wreq
 
 [![CI](https://github.com/0x676e67/wreq/actions/workflows/ci.yml/badge.svg)](https://github.com/0x676e67/wreq/actions/workflows/ci.yml)
 [![Crates.io License](https://img.shields.io/crates/l/wreq)](https://github.com/0x676e67/wreq/blob/main/LICENSE)

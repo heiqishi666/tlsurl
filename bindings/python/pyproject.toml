@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "tlsurl"
+version = "0.1.0"
+description = "Rust-powered HTTP client with native Python bindings"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "tlsurl._native"
