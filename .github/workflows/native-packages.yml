@@ -91,6 +91,7 @@ jobs:
           python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl --https
           python tests/bindings/protocol.py --node-module dist/consumer/node_modules/tlsurl
           python tests/bindings/stream.py --node-module dist/consumer/node_modules/tlsurl
+          python tests/bindings/upload.py --node-module dist/consumer/node_modules/tlsurl
       - uses: actions/upload-artifact@v4
         with:
           name: tlsurl-${{ matrix.platform.target }}
@@ -165,6 +166,7 @@ jobs:
           python tests/bindings/smoke.py --node-module dist/node22/node_modules/tlsurl --https
           python tests/bindings/protocol.py --node-module dist/node22/node_modules/tlsurl
           python tests/bindings/stream.py --node-module dist/node22/node_modules/tlsurl
+          python tests/bindings/upload.py --node-module dist/node22/node_modules/tlsurl
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -175,3 +177,4 @@ jobs:
           python tests/bindings/smoke.py --node-module dist/node24/node_modules/tlsurl --https
           python tests/bindings/protocol.py --node-module dist/node24/node_modules/tlsurl
           python tests/bindings/stream.py --node-module dist/node24/node_modules/tlsurl
+          python tests/bindings/upload.py --node-module dist/node24/node_modules/tlsurl

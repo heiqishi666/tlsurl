@@ -1,4 +1,5 @@
 const http = require('node:http')
+const crypto = require('node:crypto')
 const states = new Map()
 const block = Buffer.from(Array.from({ length: 32768 }, (_, i) => i % 256))
 const server = http.createServer((req, res) => {
@@ -11,6 +12,35 @@ const server = http.createServer((req, res) => {
   const state = { produced: 0, closed: false, finished: false }
   states.set(id, state)
   res.on('close', () => { state.closed = true })
+  if (url.pathname.startsWith('/upload')) {
+    if (url.pathname === '/upload-redirect') {
+      res.writeHead(307, { Location: '/upload' })
+      res.end()
+      req.resume()
+      return
+    }
+    state.received = 0
+    const hash = crypto.createHash('sha256')
+    const parts = []
+    req.on('error', () => {})
+    req.on('data', chunk => {
+      state.received += chunk.length
+      hash.update(chunk)
+      if (url.pathname === '/upload-multipart') parts.push(chunk)
+      if (url.pathname === '/upload-slow') {
+        req.pause()
+        setTimeout(() => req.resume(), 20)
+      }
+    })
+    req.on('end', () => {
+      state.finished = true
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ size: state.received, sha256: hash.digest('hex'),
+        length: req.headers['content-length'], contentType: req.headers['content-type'],
+        body: url.pathname === '/upload-multipart' ? Buffer.concat(parts).toString('base64') : undefined }))
+    })
+    return
+  }
   if (url.pathname === '/delayed') {
     const timer = setTimeout(() => res.end('late'), 10000)
     res.on('close', () => clearTimeout(timer))
