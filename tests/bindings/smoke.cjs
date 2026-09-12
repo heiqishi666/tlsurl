@@ -92,7 +92,18 @@ async function main() {
   }
   assert.deepEqual((await new Client({ decompress: false }).get(base + '/gzip')).body.subarray(0, 2), Buffer.from([31, 139]))
   await assert.rejects(new Client({ maxResponseBytes: 1024 }).get(base + '/gzip'), /BODY_TOO_LARGE/)
-  if (https) assert.equal((await client.request('GET', 'https://example.com')).status, 200)
+  if (https) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        assert.equal((await client.request('GET', 'https://example.com', { timeoutMs: 10000 })).status, 200)
+        break
+      } catch (error) {
+        if (attempt === 3 || !['TIMEOUT', 'CONNECT', 'DNS'].includes(error.code)) throw error
+        console.log(`Public HTTPS transient ${error.code}, attempt ${attempt}/3`)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    }
+  }
   console.log('Node integration checks passed')
 }
 

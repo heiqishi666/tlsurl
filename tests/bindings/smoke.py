@@ -231,7 +231,16 @@ def main():
         ], check=True)
         if args.https:
             assert ssl.OPENSSL_VERSION
-            assert tlsurl.Client().request("GET", "https://example.com").status == 200
+            with tlsurl.Client(timeout_ms=10000) as public_client:
+                for attempt in range(1, 4):
+                    try:
+                        assert public_client.request("GET", "https://example.com").status == 200
+                        break
+                    except tlsurl.Error as error:
+                        if attempt == 3 or error.code not in {"TIMEOUT", "CONNECT", "DNS"}:
+                            raise
+                        print(f"Public HTTPS transient {error.code}, attempt {attempt}/3", flush=True)
+                        time.sleep(1)
         print("Python sync/async and Node package integration checks passed")
     finally:
         server.shutdown()
