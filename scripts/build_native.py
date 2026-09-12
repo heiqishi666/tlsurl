@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
@@ -36,7 +37,25 @@ def main():
         raise RuntimeError("npm is required on the build machine")
     run([npm, "ci", "--ignore-scripts"], cwd=NODE)
     run([npm, "run", "build"], cwd=NODE)
-    run([npm, "pack", "--ignore-scripts", "--pack-destination", str(DIST / "npm")], cwd=NODE)
+    # Keep unpublished optional dependencies out of the development lockfile.
+    # The distributable manifest pins every platform package to this exact version.
+    manifest = json.loads((NODE / "package.json").read_text())
+    manifest.pop("devDependencies", None)
+    manifest.pop("scripts", None)
+    manifest.pop("napi", None)
+    manifest["files"] = ["index.js", "index.mjs", "index.d.ts", "LICENSE"]
+    manifest["optionalDependencies"] = {}
+    for package in sorted((NODE / "npm").glob("*/package.json")):
+        platform_manifest = json.loads(package.read_text())
+        if platform_manifest["version"] != manifest["version"]:
+            raise RuntimeError(f"platform version mismatch: {package}")
+        manifest["optionalDependencies"][platform_manifest["name"]] = manifest["version"]
+    with tempfile.TemporaryDirectory() as staging:
+        stage = Path(staging)
+        for name in manifest["files"]:
+            shutil.copy2(NODE / name, stage / name)
+        (stage / "package.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        run([npm, "pack", "--ignore-scripts", "--pack-destination", str(DIST / "npm")], cwd=stage)
     binaries = list(NODE.glob("tlsurl.*.node"))
     if len(binaries) != 1:
         raise RuntimeError("build in a clean checkout with exactly one host binary")

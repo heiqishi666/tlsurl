@@ -85,10 +85,7 @@ jobs:
       - name: Install packaged artifacts
         run: |
           python -m pip install --no-index --only-binary=:all: --find-links dist/wheels tlsurl
-          mkdir -p dist/consumer
-          cd dist/consumer
-          npm init -y
-          npm install --ignore-scripts ../npm/tlsurl-0.1.0.tgz
+          python tests/bindings/install_npm.py --artifacts dist/npm --consumer dist/consumer
       - name: Test installed packages
         run: python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl --https
       - uses: actions/upload-artifact@v4
