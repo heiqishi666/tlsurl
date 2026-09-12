@@ -53,8 +53,11 @@ def main():
     with tempfile.TemporaryDirectory() as staging:
         stage = Path(staging)
         for name in manifest["files"]:
-            shutil.copy2(NODE / name, stage / name)
-        (stage / "package.json").write_text(json.dumps(manifest, indent=2) + "\n")
+            # Windows checkouts may use CRLF; publish identical text on every host.
+            (stage / name).write_text((NODE / name).read_text(encoding="utf-8"),
+                                     encoding="utf-8", newline="\n")
+        (stage / "package.json").write_text(json.dumps(manifest, indent=2) + "\n",
+                                            encoding="utf-8", newline="\n")
         run([npm, "pack", "--ignore-scripts", "--pack-destination", str(DIST / "npm")], cwd=stage)
     binaries = list(NODE.glob("tlsurl.*.node"))
     if len(binaries) != 1:
