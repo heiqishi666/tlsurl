@@ -20,7 +20,8 @@
     "LICENSE",
     "client.cjs",
     "client.d.ts",
-    "README.md"
+    "README.md",
+    "THIRD_PARTY_LICENSES.txt"
   ],
   "engines": {
     "node": ">=22"

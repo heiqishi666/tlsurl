@@ -6,7 +6,8 @@
   ],
   "main": "tlsurl.linux-x64-gnu.node",
   "files": [
-    "tlsurl.linux-x64-gnu.node"
+    "tlsurl.linux-x64-gnu.node",
+    "THIRD_PARTY_LICENSES.txt"
   ],
   "description": "Rust-powered HTTP client with native Node.js bindings",
   "license": "Apache-2.0",

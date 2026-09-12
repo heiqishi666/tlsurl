@@ -24,6 +24,9 @@ def main():
     os.environ.setdefault("CMAKE_GENERATOR", "Ninja")
     (DIST / "wheels").mkdir(parents=True, exist_ok=True)
     (DIST / "npm").mkdir(parents=True, exist_ok=True)
+    notices = (ROOT / "docs" / "THIRD_PARTY_LICENSES.txt").read_text(encoding="utf-8")
+    for package_dir in [ROOT / "bindings" / "python", NODE]:
+        (package_dir / "THIRD_PARTY_LICENSES.txt").write_text(notices, encoding="utf-8", newline="\n")
     wheel_args = [
         sys.executable, "-m", "maturin", "build", "--release", "--locked",
         "--manifest-path", "bindings/python/Cargo.toml", "--out", str(DIST / "wheels"),
@@ -43,7 +46,7 @@ def main():
     manifest.pop("devDependencies", None)
     manifest.pop("scripts", None)
     manifest.pop("napi", None)
-    manifest["files"] = ["index.js", "index.mjs", "index.d.ts", "client.cjs", "client.d.ts", "LICENSE", "README.md"]
+    manifest["files"] = ["index.js", "index.mjs", "index.d.ts", "client.cjs", "client.d.ts", "LICENSE", "README.md", "THIRD_PARTY_LICENSES.txt"]
     manifest["optionalDependencies"] = {}
     for package in sorted((NODE / "npm").glob("*/package.json")):
         platform_manifest = json.loads(package.read_text())
@@ -65,6 +68,7 @@ def main():
     binary = binaries[0]
     platform = binary.name.removeprefix("tlsurl.").removesuffix(".node")
     platform_dir = NODE / "npm" / platform
+    (platform_dir / "THIRD_PARTY_LICENSES.txt").write_text(notices, encoding="utf-8", newline="\n")
     shutil.copy2(binary, platform_dir / binary.name)
     run([npm, "pack", "--ignore-scripts", "--pack-destination", str(DIST / "npm")], cwd=platform_dir)
     print(json.dumps({"wheels": str(DIST / "wheels"), "npm": str(DIST / "npm")}))

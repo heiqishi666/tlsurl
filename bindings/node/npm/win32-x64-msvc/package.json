@@ -6,7 +6,8 @@
   ],
   "main": "tlsurl.win32-x64-msvc.node",
   "files": [
-    "tlsurl.win32-x64-msvc.node"
+    "tlsurl.win32-x64-msvc.node",
+    "THIRD_PARTY_LICENSES.txt"
   ],
   "description": "Rust-powered HTTP client with native Node.js bindings",
   "license": "Apache-2.0",

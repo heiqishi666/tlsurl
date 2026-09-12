@@ -9,7 +9,7 @@ description = "Rust-powered HTTP client with native Python bindings"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "THIRD_PARTY_LICENSES.txt"]
 
 [project.urls]
 Homepage = "https://github.com/heiqishi666/tlsurl"

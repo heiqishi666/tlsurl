@@ -126,14 +126,24 @@ def audit(artifacts, output):
     wheels = sorted(artifacts.rglob("*.whl"))
     if len(wheels) != 1:
         raise ValueError("audit expects exactly one host wheel")
+    notices = (Path(__file__).resolve().parents[1] / "docs/THIRD_PARTY_LICENSES.txt").read_bytes()
     binaries = []
     with zipfile.ZipFile(wheels[0]) as wheel:
+        license_paths = [name for name in wheel.namelist() if name.endswith(".dist-info/licenses/THIRD_PARTY_LICENSES.txt")]
+        if len(license_paths) != 1 or wheel.read(license_paths[0]) != notices:
+            raise ValueError("wheel third-party notices are missing or differ from source")
         natives = [name for name in wheel.namelist() if name.endswith((".so", ".pyd"))]
         if len(natives) != 1:
             raise ValueError("expected one Python native extension")
         binaries.append((wheels[0], "python", natives[0], wheel.read(natives[0])))
     for archive in sorted(artifacts.rglob("*.tgz")):
         with tarfile.open(archive) as package:
+            try:
+                notice_file = package.extractfile("package/THIRD_PARTY_LICENSES.txt")
+            except KeyError:
+                notice_file = None
+            if notice_file is None or notice_file.read() != notices:
+                raise ValueError("npm third-party notices are missing or differ from source")
             for member in package:
                 if member.isfile() and member.name.endswith(".node"):
                     binaries.append((archive, "node", member.name, package.extractfile(member).read()))

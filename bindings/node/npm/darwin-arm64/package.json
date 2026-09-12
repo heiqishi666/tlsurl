@@ -6,7 +6,8 @@
   ],
   "main": "tlsurl.darwin-arm64.node",
   "files": [
-    "tlsurl.darwin-arm64.node"
+    "tlsurl.darwin-arm64.node",
+    "THIRD_PARTY_LICENSES.txt"
   ],
   "description": "Rust-powered HTTP client with native Node.js bindings",
   "license": "Apache-2.0",
