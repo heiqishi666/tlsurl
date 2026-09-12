@@ -212,12 +212,12 @@ python scripts/build_native.py
 ```
 
 Linux 必须在 manylinux_2_28 容器中运行，不能直接将新版 Ubuntu 的产物标成 manylinux。
-macOS 拟定最低 11.0，须以目标平台验证结果为准。
+macOS 原生扩展部署目标为 11.0，但 Node 24 本身要求至少 macOS 13.5；构建目标和运行时要求见 [平台支持与审计](platform-support.md)。
 Cargo.lock 和 npm package-lock.json 随仓库提交，构建使用锁文件。
 
 工件位于 `dist/wheels` 与 `dist/npm`。主 npm tarball 只包含加载器、类型声明和许可证，通过固定版本的 optionalDependencies 引用五个平台包；各平台包单独携带原生二进制。发行 manifest 在打包暂存目录中生成，开发环境安装不会尝试下载尚未发布的平台包。
 
-工作流汇总五个平台的输出，检查主包内容一致、平台包齐全、版本一致、二进制存在以及 wheel 不重复，再生成 `native-release` 工件和 `SHA256SUMS`。这个工件包含五个 wheel、五个平台 npm tarball 和一个 npm 主包。
+工作流汇总五个平台的输出，检查主包内容一致、平台包齐全、版本一致、二进制存在以及 wheel 不重复，再生成 `native-release` 工件和 `SHA256SUMS`。这个工件包含五个 wheel、五个平台 npm tarball、一个 npm 主包及五份与包哈希绑定的平台审计报告。
 
 ## 验证与发布边界
 
