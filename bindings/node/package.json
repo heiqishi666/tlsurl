@@ -19,7 +19,8 @@
     "*.node",
     "LICENSE",
     "client.cjs",
-    "client.d.ts"
+    "client.d.ts",
+    "README.md"
   ],
   "engines": {
     "node": ">=22"
@@ -41,5 +42,14 @@
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heiqishi666/tlsurl.git",
+    "directory": "bindings/node"
+  },
+  "homepage": "https://github.com/heiqishi666/tlsurl",
+  "bugs": {
+    "url": "https://github.com/heiqishi666/tlsurl/issues"
   }
 }

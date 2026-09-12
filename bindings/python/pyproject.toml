@@ -6,9 +6,15 @@ build-backend = "maturin"
 name = "tlsurl"
 version = "0.1.0"
 description = "Rust-powered HTTP client with native Python bindings"
+readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
+
+[project.urls]
+Homepage = "https://github.com/heiqishi666/tlsurl"
+Documentation = "https://github.com/heiqishi666/tlsurl/blob/main/docs/native-bindings.md"
+Issues = "https://github.com/heiqishi666/tlsurl/issues"
 
 [tool.maturin]
 python-source = "python"

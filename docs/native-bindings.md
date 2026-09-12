@@ -13,9 +13,9 @@
 - 不读取系统代理，通过 `proxy` 显式配置 HTTP/HTTPS/SOCKS 代理；目前本地测试覆盖 HTTP 正向代理。
 - 支持查询参数追加、JSON、Form、Multipart、Basic/Bearer 认证、Cookie 读写及清空、请求级超时和重定向限制。
 - HTTP 4xx/5xx 返回响应；Python `Error.code`、Node `TlsurlError.code` 提供网络错误分类；通过 `raise_for_status()` / `raiseForStatus()` 显式检查 HTTP 状态。
-- Python 异步取消通过 pyo3-async-runtimes 传递；Node AbortSignal 尚未实现。
+- Python 支持 asyncio 取消；Node 支持 AbortSignal。取消会中止对应传输，流式响应另提供 close。
 
-流式读取、WebSocket、Node AbortSignal 仍待后续实现。首发范围与后续队列见 [交付规格](delivery-plan.md)。
+流式读取、文件上传、WebSocket 与 Node AbortSignal 已实现，接口与生命周期见下文。首发范围与验收队列见 [交付规格](delivery-plan.md)。
 
 ```python
 from tlsurl import Client, AsyncClient
@@ -35,7 +35,7 @@ console.log(response.status, response.body.toString('utf8'))
 
 响应 Header 的 value 在 Python 中是 bytes，在 Node 中是 Buffer，避免有损文本转换。请求 Header 同样使用 bytes/Buffer。
 HTTP/1 请求保留自定义 Header 名称大小写；上游会将同名重复字段分组，并采用首次出现的名称拼写，不能保证同名字段分别使用不同大小写或任意交错顺序。响应名称采用上游解析后的形式。
-当前缓冲响应可以反复访问 body；后续流式响应将采用不同的对象和一次消费语义。
+缓冲响应可以反复访问 body；流式响应使用独立对象和一次消费语义。
 
 ## 基础请求与配置
 
