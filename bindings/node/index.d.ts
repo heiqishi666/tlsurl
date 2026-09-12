@@ -11,6 +11,7 @@ export declare class Client {
   setCookie(url: string, value: string): void
   cookies(url: string): Array<Cookie>
   clearCookies(): void
+  close(): void
   request(method: string, url: string, headers: Array<Header> | undefined | null, body: Buffer | undefined | null, options: string | undefined | null, cancellation: Cancellation): Promise<Response>
   stream(method: string, url: string, headers: Array<Header> | undefined | null, body: Buffer | undefined | null, options: string | undefined | null, cancellation: Cancellation): Promise<StreamResponse>
   websocket(url: string, headers: Array<Header>, options: string, cancellation: Cancellation): Promise<WebSocket>

@@ -224,6 +224,6 @@ class Client {
     if (!this._native) throw new TlsurlError('CLOSED', 'client is closed')
     this._native.clearCookies()
   }
-  close() { this._native = null }
+  close() { this._native?.close(); this._native = null }
 }
 module.exports = { Client, Response, StreamResponse, WebSocket, TlsurlError, availableProfiles: native.availableProfiles }

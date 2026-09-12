@@ -170,7 +170,7 @@ impl WebSocket {
 
 #[napi]
 pub struct Client {
-    inner: tlsurl_core::Client,
+    inner: Option<tlsurl_core::Client>,
 }
 
 fn config_integer(value: Option<f64>, default: u32) -> Result<u32> {
@@ -183,6 +183,14 @@ fn config_integer(value: Option<f64>, default: u32) -> Result<u32> {
     Ok(value as u32)
 }
 
+impl Client {
+    fn live(&self) -> Result<&tlsurl_core::Client> {
+        self.inner
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("CLOSED: client is closed"))
+    }
+}
+
 #[napi]
 impl Client {
     #[napi(constructor)]
@@ -192,26 +200,28 @@ impl Client {
         options: Option<String>,
     ) -> Result<Self> {
         Ok(Self {
-            inner: tlsurl_core::Client::with_options(
-                config_integer(timeout_ms, 30000)?,
-                config_integer(max_response_bytes, 16777216)?,
-                tlsurl_core::parse_options(options.as_deref())
-                    .map_err(|error| Error::from_reason(error.to_string()))?,
-            )
-            .map_err(|error| Error::from_reason(error.to_string()))?,
+            inner: Some(
+                tlsurl_core::Client::with_options(
+                    config_integer(timeout_ms, 30000)?,
+                    config_integer(max_response_bytes, 16777216)?,
+                    tlsurl_core::parse_options(options.as_deref())
+                        .map_err(|error| Error::from_reason(error.to_string()))?,
+                )
+                .map_err(|error| Error::from_reason(error.to_string()))?,
+            ),
         })
     }
 
     #[napi]
     pub fn set_cookie(&self, url: String, value: String) -> Result<()> {
-        self.inner
+        self.live()?
             .set_cookie(&url, &value)
             .map_err(|error| Error::from_reason(error.to_string()))
     }
 
     #[napi]
     pub fn cookies(&self, url: String) -> Result<Vec<Cookie>> {
-        self.inner
+        self.live()?
             .cookies(&url)
             .map(|cookies| {
                 cookies
@@ -223,8 +233,14 @@ impl Client {
     }
 
     #[napi]
-    pub fn clear_cookies(&self) {
-        self.inner.clear_cookies();
+    pub fn clear_cookies(&self) -> Result<()> {
+        self.live()?.clear_cookies();
+        Ok(())
+    }
+
+    #[napi]
+    pub fn close(&mut self) {
+        self.inner.take();
     }
 
     #[napi]
@@ -248,7 +264,7 @@ impl Client {
             .collect();
         // Copy mutable JS buffers before handing the request to a worker thread.
         let body = body.map(|body| body.to_vec());
-        let client = self.inner.clone();
+        let client = self.live()?.clone();
         let token = cancellation.token.clone();
         env.spawn_future(async move {
             let response = tlsurl_core::stream::cancellable(
@@ -293,7 +309,7 @@ impl Client {
             .map(|h| (h.name, h.value.to_vec()))
             .collect();
         let body = body.map(|b| b.to_vec());
-        let client = self.inner.clone();
+        let client = self.live()?.clone();
         let token = cancellation.token.clone();
         env.spawn_future(async move {
             tlsurl_core::stream::cancellable(
@@ -322,7 +338,7 @@ impl Client {
             .into_iter()
             .map(|h| (h.name, h.value.to_vec()))
             .collect();
-        let client = self.inner.clone();
+        let client = self.live()?.clone();
         let token = cancellation.token.clone();
         env.spawn_future(async move {
             tlsurl_core::stream::cancellable(&token, client.websocket(url, headers, options))

@@ -45,6 +45,10 @@ async function main() {
   }
   const active = await (await fetch(base + '/metrics')).json()
   assert(active.connections - initialServer.connections < requests / 2, 'connection pool was not reused')
+  // Keep the native JS wrapper alive: close must not depend on garbage collection.
+  const retainedNative = client._native
+  client.close()
+  assert.throws(() => retainedNative.cookies(base), /CLOSED/)
   client.close()
   let final
   for (let i = 0; i < 100; i++) {
