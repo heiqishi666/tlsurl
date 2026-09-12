@@ -83,3 +83,38 @@ jobs:
             dist/release/SHA256SUMS
             dist/release/native-audit-*.json
           if-no-files-found: ignore
+
+  public-install:
+    name: Public install / ${{ matrix.runner }}
+    needs: release
+    if: inputs.publish
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, windows-2022, macos-15-intel, macos-15]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install exact public version without source builds
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('bindings/python/pyproject.toml','rb'))['project']['version'])")
+          python -m pip install --no-cache-dir --only-binary=:all: --index-url https://pypi.org/simple "tlsurl==$version"
+          npm install --prefix dist/public --ignore-scripts --no-audit --registry=https://registry.npmjs.org "tlsurl@$version"
+      - name: Exercise public packages
+        run: |
+          npm ci --prefix tests/bindings --ignore-scripts --omit=optional --no-audit --registry=https://registry.npmjs.org
+          python tests/bindings/smoke.py --node-module dist/public/node_modules/tlsurl --https
+          python tests/bindings/protocol.py --node-module dist/public/node_modules/tlsurl
+          python tests/bindings/stream.py --node-module dist/public/node_modules/tlsurl
+          python tests/bindings/upload.py --node-module dist/public/node_modules/tlsurl
+          python tests/bindings/websocket.py --node-module dist/public/node_modules/tlsurl
