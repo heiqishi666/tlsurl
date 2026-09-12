@@ -15,7 +15,7 @@
 - HTTP 4xx/5xx 返回响应；Python `Error.code`、Node `TlsurlError.code` 提供网络错误分类；通过 `raise_for_status()` / `raiseForStatus()` 显式检查 HTTP 状态。
 - Python 异步取消通过 pyo3-async-runtimes 传递；Node AbortSignal 尚未实现。
 
-指纹预设、流式读取、WebSocket、Node AbortSignal 仍待后续实现。首发范围与后续队列见 [交付规格](delivery-plan.md)。
+流式读取、WebSocket、Node AbortSignal 仍待后续实现。首发范围与后续队列见 [交付规格](delivery-plan.md)。
 
 ```python
 from tlsurl import Client, AsyncClient
@@ -101,6 +101,16 @@ client = Client(
 ```
 
 `tests/bindings/protocol.py` 通过本地 Node TLS/HTTP2 服务验证信任库、主机名拒绝、协议版本、ALPN、指定密码套件、mTLS、HTTP/2 SETTINGS 和伪 Header 实际顺序。测试证书仅供本地测试，不能部署到真实服务或导入系统信任库。
+
+## 浏览器预设与解压
+
+预设来自锁定的 [wreq-util 3.0.0-rc.14](https://github.com/0x676e67/wreq-util/tree/v3.0.0-rc.14)，该发布包声明 Apache-2.0，依赖 wreq 6.0.0-rc 系列。通过 Cargo patch 复用本项目的 wreq 核心，避免额外链接另一份客户端。
+
+Python `available_profiles()` / Node `availableProfiles()` 返回实际编译的 133 个预设名称，例如 `chrome_149`、`firefox_151`、`safari_26.4`。`Client(profile="chrome_149", platform="windows")` 对应 Node `new Client({profile: 'chrome_149', platform: 'windows'})`。platform 可取 windows/macos/linux/android/ios，影响预设 Header；省略时使用上游默认 macos，与运行机器的系统无关。
+
+预设先应用，随后显式 TLS/HTTP2 字段逐项覆盖，未指定字段保留预设值；请求提供 Header 顺序时覆盖默认顺序。配置修改后不再承诺与原预设完全相同。测试覆盖三个代表性浏览器的真实 TLS/HTTP2 连接，以及 Chrome UA、HTTP2 表大小和覆盖规则；未逐一对照真实浏览器的全部指纹。
+
+默认启用 gzip、deflate、Brotli、Zstd 自动解压，缓冲大小限制作用于解压后的字节。`decompress=False` / `{decompress: false}` 可保留压缩响应字节；若同时使用带 Accept-Encoding 的预设，服务端仍可能发送压缩响应，调用者须自行处理。
 
 ## 构建
 
