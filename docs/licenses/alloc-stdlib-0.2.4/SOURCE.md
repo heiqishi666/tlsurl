@@ -1,0 +1,7 @@
+# alloc-stdlib 0.2.4
+
+Source: https://github.com/dropbox/rust-alloc-no-stdlib/blob/ae42d22078b98549e987d2f03d12df7b984fde47/LICENSE
+
+Commit: `ae42d22078b98549e987d2f03d12df7b984fde47` (from the published crate .cargo_vcs_info.json).
+
+SHA-256: `c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae`
