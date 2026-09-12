@@ -8,6 +8,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from audit_native import validate
@@ -49,8 +50,9 @@ class CollectionTests(unittest.TestCase):
             tar(group / "tlsurl-0.1.0.tgz", {"package.json": main})
             native = group / f"{name}-0.1.0.tgz"
             tar(native, {"package.json": {"name": name, "version": "0.1.0", "main": "native.node"}, "native.node": b"test fixture"})
-            wheel = group / f"test-{index}.whl"
-            wheel.write_bytes(b"test wheel fixture")
+            wheel = group / f"tlsurl-0.1.0-cp310-abi3-test_{index}.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr("tlsurl-0.1.0.dist-info/METADATA", "Metadata-Version: 2.4\nName: tlsurl\nVersion: 0.1.0\n")
             report = {"schema": 1, "git_commit": "source-commit", "binaries": [
                 {"archive": path.name, "language": language, "archive_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
                 for path, language in [(native, "node"), (wheel, "python")]
@@ -66,6 +68,26 @@ class CollectionTests(unittest.TestCase):
             collect(source, root / "release")
             self.assertEqual(len((root / "release/SHA256SUMS").read_text().splitlines()), 16)
 
+    def test_rejects_mismatched_wheel_metadata_even_with_valid_audit(self):
+        for metadata in ["Name: other\nVersion: 0.1.0\n", "Name: tlsurl\nVersion: 0.2.0\n",
+                         "Name: tlsurl\nVersion: 0.1.0\nVersion: 0.2.0\n"]:
+            with self.subTest(metadata=metadata), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                source = root / "source"
+                source.mkdir()
+                self.fixture(source)
+                group = source / "tlsurl-test-0"
+                wheel = next(group.glob("*.whl"))
+                with zipfile.ZipFile(wheel, "w") as archive:
+                    archive.writestr("tlsurl-0.1.0.dist-info/METADATA", metadata)
+                audit = group / "native-audit-0.json"
+                report = json.loads(audit.read_text())
+                report["binaries"][1]["archive_sha256"] = hashlib.sha256(wheel.read_bytes()).hexdigest()
+                audit.write_text(json.dumps(report))
+                with self.assertRaisesRegex(ValueError, "wheel name or version mismatch"):
+                    collect(source, root / "release")
+                self.assertFalse((root / "release").exists())
+
     def test_rejects_changed_artifact_or_missing_audit(self):
         for mutation in ["tamper", "missing", "different-commit"]:
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
@@ -76,7 +98,7 @@ class CollectionTests(unittest.TestCase):
                 group = source / "tlsurl-test-0"
                 audit = group / "native-audit-0.json"
                 if mutation == "tamper":
-                    (group / "test-0.whl").write_bytes(b"changed after audit")
+                    (group / "tlsurl-0.1.0-cp310-abi3-test_0.whl").write_bytes(b"changed after audit")
                 elif mutation == "missing":
                     audit.unlink()
                 else:

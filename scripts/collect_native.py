@@ -1,11 +1,13 @@
 """Validate five build outputs and assemble one unpublished release directory."""
 
 import argparse
+from email.parser import BytesParser
 import hashlib
 import json
 from pathlib import Path
 import shutil
 import tarfile
+import zipfile
 
 
 def contents(path):
@@ -78,6 +80,21 @@ def collect(source, destination):
                 raise ValueError(f"version mismatch: {archive}")
     if any(version != manifest["version"] for version in dependencies.values()):
         raise ValueError("optional dependencies must use the exact release version")
+    for archive in selected.values():
+        if archive.suffix != ".whl":
+            continue
+        with zipfile.ZipFile(archive) as wheel:
+            metadata_paths = [name for name in wheel.namelist() if name.endswith(".dist-info/METADATA")]
+            if len(metadata_paths) != 1:
+                raise ValueError(f"expected one wheel metadata record: {archive}")
+            metadata = BytesParser().parsebytes(wheel.read(metadata_paths[0]))
+        version = manifest["version"]
+        if metadata.get_all("Name") != ["tlsurl"] or metadata.get_all("Version") != [version]:
+            raise ValueError(f"wheel name or version mismatch: {archive}")
+        if not archive.name.startswith(f"tlsurl-{version}-"):
+            raise ValueError(f"wheel filename version mismatch: {archive}")
+        if metadata_paths[0] != f"tlsurl-{version}.dist-info/METADATA":
+            raise ValueError(f"wheel metadata directory mismatch: {archive}")
     destination.mkdir(parents=True, exist_ok=False)
     checksums = []
     for name, path in sorted(selected.items()):
