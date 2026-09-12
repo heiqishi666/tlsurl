@@ -9,7 +9,7 @@ on:
       - 'crates/**'
       - 'src/**'
       - 'Cargo.*'
-      - 'scripts/build_native.py'
+      - 'scripts/**'
       - 'tests/bindings/**'
       - '.github/workflows/native-packages.yml'
   pull_request:
@@ -19,14 +19,14 @@ permissions:
 
 jobs:
   build:
-    name: ${{ matrix.target }}
-    runs-on: ${{ matrix.runner }}
-    container: ${{ matrix.container }}
+    name: ${{ matrix.platform.target }}
+    runs-on: ${{ matrix.platform.runner }}
+    container: ${{ matrix.platform.container }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include:
+        platform: &platforms
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-24.04
             container: quay.io/pypa/manylinux_2_28_x86_64
@@ -90,8 +90,81 @@ jobs:
         run: python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl --https
       - uses: actions/upload-artifact@v4
         with:
-          name: tlsurl-${{ matrix.target }}
+          name: tlsurl-${{ matrix.platform.target }}
           path: |
             dist/wheels/*.whl
             dist/npm/*.tgz
           if-no-files-found: error
+
+  collect:
+    name: Validate release artifacts
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tlsurl-*
+          path: dist/download
+      - run: python scripts/collect_native.py --source dist/download --destination dist/release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-release
+          path: dist/release/*
+          if-no-files-found: error
+
+  compatibility:
+    name: ${{ matrix.platform.target }} / Python ${{ matrix.python }} / Node 22+24
+    needs: collect
+    runs-on: ${{ matrix.platform.runner }}
+    container: ${{ matrix.platform.container }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        platform: *platforms
+        python: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select manylinux Python
+        if: runner.os == 'Linux'
+        env:
+          PYTHON_VERSION: ${{ matrix.python }}
+        run: |
+          tag="cp${PYTHON_VERSION//./}"
+          echo "/opt/python/$tag-$tag/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-python@v5
+        if: runner.os != 'Linux'
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-release
+          path: dist/release
+      - name: Install precompiled wheel
+        run: |
+          python --version
+          python -m pip install --no-index --only-binary=:all: --find-links dist/release tlsurl
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Node 22 automatic selection and protocol tests
+        run: |
+          node --version
+          python tests/bindings/install_npm.py --artifacts dist/release --consumer dist/node22
+          python tests/bindings/smoke.py --node-module dist/node22/node_modules/tlsurl --https
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Node 24 automatic selection and protocol tests
+        run: |
+          node --version
+          python tests/bindings/install_npm.py --artifacts dist/release --consumer dist/node24
+          python tests/bindings/smoke.py --node-module dist/node24/node_modules/tlsurl --https
