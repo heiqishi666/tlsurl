@@ -147,7 +147,7 @@ def audit(artifacts, output):
             validate(result, language, arch)
             reports.append({"archive": archive.name, "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(), "language": language, "binary": name, **result})
     report = {
-        "schema": 1, "git_commit": command("git", "rev-parse", "HEAD").strip(),
+        "schema": 1, "git_commit": command("git", "-c", f"safe.directory={Path(__file__).resolve().parents[1]}", "-C", str(Path(__file__).resolve().parents[1]), "rev-parse", "HEAD").strip(),
         "host": {"system": platform.system(), "release": platform.release(), "machine": machine, "libc": platform.libc_ver()},
         "toolchain": {"rust": command("rustc", "--version").strip(), "python": platform.python_version(), "node": command("node", "--version").strip()},
         "binaries": reports,
