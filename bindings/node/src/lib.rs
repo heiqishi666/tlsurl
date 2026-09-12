@@ -123,3 +123,8 @@ impl Client {
         })
     }
 }
+
+#[napi]
+pub fn available_profiles() -> Result<Vec<String>> {
+    tlsurl_core::available_profiles().map_err(|error| Error::from_reason(error.to_string()))
+}

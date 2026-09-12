@@ -4,6 +4,10 @@ members = ["crates/tlsurl-core", "bindings/python", "bindings/node"]
 default-members = [".", "crates/tlsurl-core"]
 resolver = "3"
 
+# Keep companion utilities on the modified local client rather than a second registry copy.
+[patch.crates-io]
+wreq = { path = "." }
+
 [package]
 name = "wreq"
 version = "6.0.0-rc.29"

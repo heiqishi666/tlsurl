@@ -32,6 +32,9 @@ pub struct ClientOptions {
     pub tls: Option<protocol::TlsConfig>,
     pub http2: Option<protocol::Http2Config>,
     pub identity: Option<protocol::IdentityConfig>,
+    pub profile: Option<wreq_util::Profile>,
+    pub platform: Option<wreq_util::Platform>,
+    pub decompress: Option<bool>,
 }
 
 #[derive(Default, Deserialize)]
@@ -145,8 +148,29 @@ impl Client {
             });
         }
         let jar = Arc::new(wreq::cookie::Jar::default());
-        let mut builder = wreq::Client::builder()
-            .no_proxy()
+        let mut builder = wreq::Client::builder().no_proxy();
+        let mut profile_tls = None;
+        let mut profile_http2 = None;
+        if let Some(profile) = options.profile {
+            let emulation = wreq::IntoEmulation::into_emulation(
+                wreq_util::Emulation::builder()
+                    .profile(profile)
+                    .platform(options.platform.unwrap_or_default())
+                    .build(),
+            );
+            profile_tls = emulation.tls_options.clone();
+            profile_http2 = emulation.http2_options.clone();
+            builder = builder.emulation(emulation);
+        } else if options.platform.is_some() {
+            return Err(Error {
+                code: "INVALID_CONFIG",
+                message: "platform requires a profile".into(),
+            });
+        }
+        if options.decompress == Some(false) {
+            builder = builder.no_gzip().no_brotli().no_deflate().no_zstd();
+        }
+        builder = builder
             .redirect(redirect_policy(options.max_redirects.unwrap_or(10)))
             .timeout(positive_ms(timeout_ms)?)
             .tls_cert_verification(options.verify.unwrap_or(true));
@@ -183,10 +207,10 @@ impl Client {
             };
         }
         if let Some(tls) = options.tls {
-            builder = tls.apply(builder)?;
+            builder = tls.apply(builder, profile_tls)?;
         }
         if let Some(http2) = options.http2 {
-            builder = http2.apply(builder)?;
+            builder = http2.apply(builder, profile_http2)?;
         }
         if let Some(identity) = options.identity {
             builder = identity.apply(builder)?;
@@ -278,12 +302,15 @@ impl Client {
         if let Some(token) = options.bearer_token {
             request = request.bearer_auth(token);
         }
+        let has_headers = !headers.is_empty();
         let mut original_headers = wreq::header::OrigHeaderMap::new();
         for (name, value) in headers {
             original_headers.insert(name.clone());
             request = request.header(name, value);
         }
-        request = request.orig_headers(original_headers);
+        if has_headers {
+            request = request.orig_headers(original_headers);
+        }
         if let Some(parts) = options.multipart {
             let data = body.unwrap_or_default();
             let mut form = wreq::multipart::Form::new();
@@ -358,4 +385,19 @@ fn http_url(value: &str) -> Result<url::Url, Error> {
         });
     }
     Ok(url)
+}
+
+pub fn available_profiles() -> Result<Vec<String>, Error> {
+    wreq_util::Profile::VARIANTS
+        .iter()
+        .map(|profile| {
+            serde_json::to_value(profile)
+                .ok()
+                .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                .ok_or_else(|| Error {
+                    code: "INTERNAL",
+                    message: "failed to serialize profile name".into(),
+                })
+        })
+        .collect()
 }

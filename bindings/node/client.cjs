@@ -27,6 +27,7 @@ const clientKeys = {
   proxy: 'proxy', verify: 'verify', caPem: 'ca_pem', maxRedirects: 'max_redirects',
   cookies: 'cookies', userAgent: 'user_agent', httpVersion: 'http_version',
   tls: 'tls', http2: 'http2', identity: 'identity',
+  profile: 'profile', platform: 'platform', decompress: 'decompress',
 }
 const requestKeys = {
   timeoutMs: 'timeout_ms', maxRedirects: 'max_redirects',
@@ -117,4 +118,4 @@ class Client {
   }
   close() { this._native = null }
 }
-module.exports = { Client, Response, TlsurlError }
+module.exports = { Client, Response, TlsurlError, availableProfiles: native.availableProfiles }

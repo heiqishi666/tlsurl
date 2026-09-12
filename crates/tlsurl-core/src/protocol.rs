@@ -39,20 +39,24 @@ fn version(value: &str) -> Result<(u8, TlsVersion), Error> {
 }
 
 impl TlsConfig {
-    pub fn apply(self, mut builder: ClientBuilder) -> Result<ClientBuilder, Error> {
+    pub fn apply(
+        self,
+        mut builder: ClientBuilder,
+        base: Option<TlsOptions>,
+    ) -> Result<ClientBuilder, Error> {
         let min = self.min_version.as_deref().map(version).transpose()?;
         let max = self.max_version.as_deref().map(version).transpose()?;
         if min.zip(max).is_some_and(|(min, max)| min.0 > max.0) {
             return Err(invalid("TLS minimum version exceeds maximum version"));
         }
-        let mut options = TlsOptions::default();
-        options.min_tls_version = min.map(|v| v.1);
-        options.max_tls_version = max.map(|v| v.1);
-        options.cipher_list = self.cipher_list.map(Into::into);
-        options.curves_list = self.curves_list.map(Into::into);
-        options.sigalgs_list = self.sigalgs_list.map(Into::into);
-        options.grease_enabled = self.grease;
-        options.permute_extensions = self.permute_extensions;
+        let mut options = base.unwrap_or_default();
+        options.min_tls_version = min.map(|v| v.1).or(options.min_tls_version);
+        options.max_tls_version = max.map(|v| v.1).or(options.max_tls_version);
+        options.cipher_list = self.cipher_list.map(Into::into).or(options.cipher_list);
+        options.curves_list = self.curves_list.map(Into::into).or(options.curves_list);
+        options.sigalgs_list = self.sigalgs_list.map(Into::into).or(options.sigalgs_list);
+        options.grease_enabled = self.grease.or(options.grease_enabled);
+        options.permute_extensions = self.permute_extensions.or(options.permute_extensions);
         if let Some(protocols) = self.alpn {
             let protocols = protocols
                 .iter()
@@ -84,7 +88,11 @@ pub struct Http2Config {
 }
 
 impl Http2Config {
-    pub fn apply(self, builder: ClientBuilder) -> Result<ClientBuilder, Error> {
+    pub fn apply(
+        self,
+        builder: ClientBuilder,
+        base: Option<Http2Options>,
+    ) -> Result<ClientBuilder, Error> {
         if self.initial_window_size.is_some_and(|n| n > 0x7fff_ffff)
             || self
                 .initial_connection_window_size
@@ -100,24 +108,24 @@ impl Http2Config {
                 "HTTP/2 max_frame_size must be 16384 through 16777215",
             ));
         }
-        let mut options = Http2Options::builder();
+        let mut options = base.unwrap_or_else(|| Http2Options::builder().build());
         if let Some(n) = self.initial_window_size {
-            options = options.initial_window_size(n);
+            options.initial_window_size = n;
         }
         if let Some(n) = self.initial_connection_window_size {
-            options = options.initial_connection_window_size(n);
+            options.initial_conn_window_size = n;
         }
         if let Some(n) = self.max_frame_size {
-            options = options.max_frame_size(n);
+            options.max_frame_size = Some(n);
         }
         if let Some(n) = self.max_header_list_size {
-            options = options.max_header_list_size(n);
+            options.max_header_list_size = Some(n);
         }
         if let Some(n) = self.header_table_size {
-            options = options.header_table_size(n);
+            options.header_table_size = Some(n);
         }
         if let Some(enabled) = self.enable_push {
-            options = options.enable_push(enabled);
+            options.enable_push = Some(enabled);
         }
         if let Some(names) = self.pseudo_order {
             let mut unique = names.clone();
@@ -138,9 +146,9 @@ impl Http2Config {
                     _ => Err(invalid("unknown HTTP/2 pseudo header")),
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            options = options.headers_pseudo_order(PseudoOrder::builder().extend(order).build());
+            options.headers_pseudo_order = Some(PseudoOrder::builder().extend(order).build());
         }
-        Ok(builder.http2_options(options.build()))
+        Ok(builder.http2_options(options))
     }
 }
 

@@ -14,6 +14,9 @@ export interface ClientOptions {
   tls?: TlsOptions
   http2?: Http2Options
   identity?: {certificatePem: string; privateKeyPem: string}
+  profile?: string
+  platform?: 'windows' | 'macos' | 'linux' | 'android' | 'ios'
+  decompress?: boolean
 }
 export interface TlsOptions {
   minVersion?: '1.0' | '1.1' | '1.2' | '1.3'
@@ -56,6 +59,7 @@ export interface RequestOptions {
   bearerToken?: string
 }
 export class TlsurlError extends Error { readonly code: string }
+export function availableProfiles(): string[]
 export class Response {
   readonly status: number
   readonly httpVersion: string
@@ -78,5 +82,5 @@ export class Client {
   cookies(url: string): {name: string; value: string}[]
   close(): void
 }
-declare const bindings: { Client: typeof Client; Response: typeof Response; TlsurlError: typeof TlsurlError }
+declare const bindings: { Client: typeof Client; Response: typeof Response; TlsurlError: typeof TlsurlError; availableProfiles: typeof availableProfiles }
 export default bindings

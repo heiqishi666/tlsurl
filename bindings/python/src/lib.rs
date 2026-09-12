@@ -121,8 +121,14 @@ impl Client {
     }
 }
 
+#[pyfunction]
+fn available_profiles() -> PyResult<Vec<String>> {
+    tlsurl_core::available_profiles().map_err(py_error)
+}
+
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(available_profiles, module)?)?;
     module.add_class::<Client>()?;
     module.add_class::<Response>()?;
     Ok(())

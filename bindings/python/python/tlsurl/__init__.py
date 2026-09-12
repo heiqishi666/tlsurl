@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from . import _native
 
 _UNSET = object()
+available_profiles = _native.available_profiles
 
 
 class Error(RuntimeError):
@@ -174,4 +175,4 @@ class AsyncClient(Client):
         self.close()
 
 
-__all__ = ["Client", "AsyncClient", "Response", "Error"]
+__all__ = ["Client", "AsyncClient", "Response", "Error", "available_profiles"]

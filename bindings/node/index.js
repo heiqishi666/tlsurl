@@ -700,3 +700,4 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.Client = nativeBinding.Client
+module.exports.availableProfiles = nativeBinding.availableProfiles

@@ -9,6 +9,8 @@ export declare class Client {
   request(method: string, url: string, headers?: Array<Header> | undefined | null, body?: Buffer | undefined | null, options?: string | undefined | null): Promise<Response>
 }
 
+export declare function availableProfiles(): Array<string>
+
 export interface Cookie {
   name: string
   value: string
