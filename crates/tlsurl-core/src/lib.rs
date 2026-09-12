@@ -5,6 +5,7 @@ use std::{fmt, sync::Arc, time::Duration};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use wreq::cookie::IntoCookie;
+mod protocol;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -28,6 +29,9 @@ pub struct ClientOptions {
     pub cookies: Option<bool>,
     pub user_agent: Option<String>,
     pub http_version: Option<String>,
+    pub tls: Option<protocol::TlsConfig>,
+    pub http2: Option<protocol::Http2Config>,
+    pub identity: Option<protocol::IdentityConfig>,
 }
 
 #[derive(Default, Deserialize)]
@@ -118,6 +122,7 @@ pub struct Client {
 
 pub struct Response {
     pub status: u16,
+    pub http_version: String,
     pub url: String,
     pub headers: Vec<(String, Vec<u8>)>,
     pub body: Vec<u8>,
@@ -176,6 +181,15 @@ impl Client {
                     });
                 }
             };
+        }
+        if let Some(tls) = options.tls {
+            builder = tls.apply(builder)?;
+        }
+        if let Some(http2) = options.http2 {
+            builder = http2.apply(builder)?;
+        }
+        if let Some(identity) = options.identity {
+            builder = identity.apply(builder)?;
         }
         Ok(Self {
             inner: builder.build()?,
@@ -296,6 +310,14 @@ impl Client {
         }
         let response = request.send().await?;
         let status = response.status().as_u16();
+        let http_version = match response.version() {
+            wreq::Version::HTTP_09 => "0.9",
+            wreq::Version::HTTP_10 => "1.0",
+            wreq::Version::HTTP_11 => "1.1",
+            wreq::Version::HTTP_2 => "2",
+            _ => "unknown",
+        }
+        .to_owned();
         let url = response.uri().to_string();
         let headers = response
             .headers()
@@ -316,6 +338,7 @@ impl Client {
         }
         Ok(Response {
             status,
+            http_version,
             url,
             headers,
             body,

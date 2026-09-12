@@ -16,6 +16,7 @@ pub struct Header {
 #[napi(object)]
 pub struct Response {
     pub status: u16,
+    pub http_version: String,
     pub url: String,
     pub headers: Vec<Header>,
     pub body: Buffer,
@@ -107,6 +108,7 @@ impl Client {
                 .map_err(|error| Error::from_reason(error.to_string()))?;
             Ok(Response {
                 status: response.status,
+                http_version: response.http_version,
                 url: response.url,
                 headers: response
                     .headers

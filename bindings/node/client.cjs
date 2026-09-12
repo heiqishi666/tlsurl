@@ -26,10 +26,16 @@ const clientKeys = {
   connectTimeoutMs: 'connect_timeout_ms', readTimeoutMs: 'read_timeout_ms',
   proxy: 'proxy', verify: 'verify', caPem: 'ca_pem', maxRedirects: 'max_redirects',
   cookies: 'cookies', userAgent: 'user_agent', httpVersion: 'http_version',
+  tls: 'tls', http2: 'http2', identity: 'identity',
 }
 const requestKeys = {
   timeoutMs: 'timeout_ms', maxRedirects: 'max_redirects',
   basicAuth: 'basic_auth', bearerToken: 'bearer_token',
+}
+const nestedKeys = {
+  tls: { minVersion: 'min_version', maxVersion: 'max_version', alpn: 'alpn', cipherList: 'cipher_list', curvesList: 'curves_list', sigalgsList: 'sigalgs_list', grease: 'grease', permuteExtensions: 'permute_extensions', sni: 'sni' },
+  http2: { initialWindowSize: 'initial_window_size', initialConnectionWindowSize: 'initial_connection_window_size', maxFrameSize: 'max_frame_size', maxHeaderListSize: 'max_header_list_size', headerTableSize: 'header_table_size', enablePush: 'enable_push', pseudoOrder: 'pseudo_order' },
+  identity: { certificatePem: 'certificate_pem', privateKeyPem: 'private_key_pem' },
 }
 function pairs(value) { return Array.isArray(value) ? value : Object.entries(value) }
 function optionsJson(options, keys) {
@@ -38,7 +44,7 @@ function optionsJson(options, keys) {
     if (value === undefined) continue
     if (!Object.hasOwn(keys, name)) throw new TlsurlError('INVALID_CONFIG', `unknown option: ${name}`)
     if (typeof value === 'number' && !Number.isFinite(value)) throw new TlsurlError('INVALID_CONFIG', `${name} must be finite`)
-    result[keys[name]] = value
+    result[keys[name]] = Object.hasOwn(nestedKeys, name) && value != null ? optionsJson(value, nestedKeys[name]) : value
   }
   return result
 }

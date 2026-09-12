@@ -17,6 +17,11 @@ impl Response {
     }
 
     #[getter]
+    fn http_version(&self) -> &str {
+        &self.inner.http_version
+    }
+
+    #[getter]
     fn url(&self) -> &str {
         &self.inner.url
     }

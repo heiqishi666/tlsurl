@@ -11,6 +11,29 @@ export interface ClientOptions {
   cookies?: boolean
   userAgent?: string
   httpVersion?: 'auto' | '1.1' | '2'
+  tls?: TlsOptions
+  http2?: Http2Options
+  identity?: {certificatePem: string; privateKeyPem: string}
+}
+export interface TlsOptions {
+  minVersion?: '1.0' | '1.1' | '1.2' | '1.3'
+  maxVersion?: '1.0' | '1.1' | '1.2' | '1.3'
+  alpn?: ('h2' | 'http/1.1')[]
+  cipherList?: string
+  curvesList?: string
+  sigalgsList?: string
+  grease?: boolean
+  permuteExtensions?: boolean
+  sni?: boolean
+}
+export interface Http2Options {
+  initialWindowSize?: number
+  initialConnectionWindowSize?: number
+  maxFrameSize?: number
+  maxHeaderListSize?: number
+  headerTableSize?: number
+  enablePush?: boolean
+  pseudoOrder?: ('method' | 'path' | 'authority' | 'scheme')[]
 }
 export interface Header { name: string; value: string | Uint8Array }
 export type Pairs = [string, string][] | Record<string, string>
@@ -35,6 +58,7 @@ export interface RequestOptions {
 export class TlsurlError extends Error { readonly code: string }
 export class Response {
   readonly status: number
+  readonly httpVersion: string
   readonly url: string
   readonly headers: {name: string; value: Buffer}[]
   readonly body: Buffer

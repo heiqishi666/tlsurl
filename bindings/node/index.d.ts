@@ -21,6 +21,7 @@ export interface Header {
 
 export interface Response {
   status: number
+  httpVersion: string
   url: string
   headers: Array<Header>
   body: Buffer

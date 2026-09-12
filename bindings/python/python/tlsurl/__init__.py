@@ -28,6 +28,10 @@ class Response:
         return self._native.status
 
     @property
+    def http_version(self):
+        return self._native.http_version
+
+    @property
     def url(self):
         return self._native.url
 
