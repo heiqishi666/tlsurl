@@ -64,7 +64,7 @@ try {
 }
 ```
 
-Python Multipart 字段使用 `name/data/filename/content_type`，Node 使用 `name/data/filename/contentType`；当前文件内容由调用者读成 bytes/Buffer，上传编码由 Rust 生成，尚不是磁盘流式上传。`body/json/form/multipart` 互斥；参数支持重复键，追加而不覆盖 URL 已有查询。params 和 form 使用字符串键值对。
+Python Multipart 字段使用 `name/data/file/filename/content_type`，Node 使用 `name/data/file/filename/contentType`；data 与 file 二选一，file 是磁盘路径，默认 filename 取文件名。上传编码由 Rust 生成。`body/body_file/json/form/multipart` 互斥（Node 使用 bodyFile）；参数支持重复键，追加而不覆盖 URL 已有查询。params 和 form 使用字符串键值对。
 
 客户端配置为 Python `connect_timeout_ms/read_timeout_ms/proxy/verify/ca_pem/max_redirects/cookies/user_agent/http_version`；Node 对应 camelCase。`http_version` 为 `auto/1.1/2`。`ca_pem` 是 PEM 内容，替换默认信任库；`verify=False` 仅在显式配置时关闭证书校验。重定向上限 0 表示不跟随。
 
@@ -155,7 +155,17 @@ try {
 
 response.close() 幂等，唤醒等待中的读取并释放正文；关闭后的读取返回 CANCELLED。EOF 前的并发读取会串行执行，但应用应使用一个消费者以保持处理顺序。Rust 核心按调用拉取数据，没有持续读取正文的应用层后台队列；HTTP/TLS/内核仍有正常协议缓冲。用户自己累计 chunk 或保留未关闭的响应仍会占用内存/连接。
 
-`tests/bindings/stream.py` 验证完整二进制流、超过缓冲上限的流式下载、128 MiB 响应暂停消费后的背压、提前关闭/取消后的服务端连接关闭、正文超时及重复取消。上传当前仍为缓冲 bytes/Buffer，文件流式上传和 WebSocket 尚未实现。
+`tests/bindings/stream.py` 验证完整二进制流、超过缓冲上限的流式下载、128 MiB 响应暂停消费后的背压、提前关闭/取消后的服务端连接关闭、正文超时及重复取消。文件上传见下一节，WebSocket 尚未实现。
+
+## 文件流式上传
+
+Python `client.post(url, body_file=path)`，Node `client.post(url, {bodyFile: path})` 直接上传文件。Multipart 使用 `{name: "attachment", file: path}`，可以与 data 字段混合；filename 省略时取文件名，content_type/contentType 可显式指定。Python 接受字符串或 PathLike 路径，Node 接受字符串路径。
+
+Rust 异步打开文件，按下游需要读取，每次最多 64 KiB；语言层不先读取完整文件。文件须为普通文件，调用者应在上传期间保持内容不变。长度取自打开的文件，追加的内容不会超出声明长度。原始文件和 Multipart 文件的 Content-Length/Transfer-Encoding 由核心管理，不接受手动覆盖。缺失或不可访问文件返回 FILE_IO。
+
+文件正文不可重放：当前收到需要保留正文的 307/308 重定向时返回该响应，不自动重新打开/上传文件；调用者可检查目标后显式发起新请求。取消会释放请求与文件读取资源，语义与前一节一致。任意 Python/Node 生成器上传尚未开放。
+
+`tests/bindings/upload.py` 验证实包上传的字节数与 SHA-256、空文件、混合 Multipart、冲突配置、缺失文件、307 行为和 128 MiB 文件取消。Node 用例还检查上传开始后的 RSS 增量小于 64 MiB，防止退化为整文件缓冲；这不是所有业务负载的内存上限承诺。
 
 ## 构建
 
