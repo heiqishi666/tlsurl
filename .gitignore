@@ -15,6 +15,8 @@ keylog.txt
 !bindings/node/package.json
 !bindings/node/package-lock.json
 !bindings/node/npm/*/package.json
+!tests/bindings/package.json
+!tests/bindings/package-lock.json
 .codegraph/
 .venv/
 node_modules/

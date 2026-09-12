@@ -82,16 +82,25 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: python scripts/build_native.py
+      - name: Core cancellation regressions
+        if: runner.os != 'Windows'
+        run: cargo test --release --locked -p tlsurl-core --lib
+      - name: Windows core cancellation regressions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cargo test --release --locked -p tlsurl-core --lib
       - name: Install packaged artifacts
         run: |
           python -m pip install --no-index --only-binary=:all: --find-links dist/wheels tlsurl
           python tests/bindings/install_npm.py --artifacts dist/npm --consumer dist/consumer
       - name: Test installed packages
         run: |
+          npm ci --prefix tests/bindings --ignore-scripts --omit=optional --no-audit
           python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl --https
           python tests/bindings/protocol.py --node-module dist/consumer/node_modules/tlsurl
           python tests/bindings/stream.py --node-module dist/consumer/node_modules/tlsurl
           python tests/bindings/upload.py --node-module dist/consumer/node_modules/tlsurl
+          python tests/bindings/websocket.py --node-module dist/consumer/node_modules/tlsurl
       - uses: actions/upload-artifact@v4
         with:
           name: tlsurl-${{ matrix.platform.target }}
@@ -163,10 +172,12 @@ jobs:
         run: |
           node --version
           python tests/bindings/install_npm.py --artifacts dist/release --consumer dist/node22
+          npm ci --prefix tests/bindings --ignore-scripts --omit=optional --no-audit
           python tests/bindings/smoke.py --node-module dist/node22/node_modules/tlsurl --https
           python tests/bindings/protocol.py --node-module dist/node22/node_modules/tlsurl
           python tests/bindings/stream.py --node-module dist/node22/node_modules/tlsurl
           python tests/bindings/upload.py --node-module dist/node22/node_modules/tlsurl
+          python tests/bindings/websocket.py --node-module dist/node22/node_modules/tlsurl
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -178,3 +189,4 @@ jobs:
           python tests/bindings/protocol.py --node-module dist/node24/node_modules/tlsurl
           python tests/bindings/stream.py --node-module dist/node24/node_modules/tlsurl
           python tests/bindings/upload.py --node-module dist/node24/node_modules/tlsurl
+          python tests/bindings/websocket.py --node-module dist/node24/node_modules/tlsurl
