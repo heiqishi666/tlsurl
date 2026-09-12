@@ -2,5 +2,9 @@
   "name": "tlsurl-test-servers",
   "private": true,
   "version": "0.0.0",
-  "devDependencies": { "ws": "8.21.3" }
+  "devDependencies": {
+    "ws": "8.21.3",
+    "typescript": "6.0.3",
+    "@types/node": "22.20.2"
+  }
 }

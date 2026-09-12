@@ -40,13 +40,14 @@ export interface Http2Options {
 }
 export interface Header { name: string; value: string | Uint8Array }
 export type Pairs = [string, string][] | Record<string, string>
-export interface MultipartPart {
+interface MultipartMetadata {
   name: string
-  data?: string | Uint8Array
-  file?: string
   filename?: string
   contentType?: string
 }
+export type MultipartPart = MultipartMetadata & (
+  { data: string | Uint8Array; file?: never } | { file: string; data?: never }
+)
 export interface RequestOptions {
   signal?: AbortSignal
   headers?: Header[] | Record<string, string | Uint8Array>

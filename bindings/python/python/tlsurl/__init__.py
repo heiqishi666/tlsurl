@@ -5,6 +5,7 @@ from os import fspath
 from urllib.parse import urlencode
 
 from . import _native
+from .types import TlsOptions, Http2Options, Identity, MultipartData, MultipartFile, MultipartPart
 
 _UNSET = object()
 available_profiles = _native.available_profiles
@@ -401,4 +402,4 @@ class AsyncClient(Client):
         self.close()
 
 
-__all__ = ["Client", "AsyncClient", "Response", "StreamResponse", "WebSocket", "AsyncWebSocket", "WebSocketMessage", "Error", "available_profiles"]
+__all__ = ["Client", "AsyncClient", "Response", "StreamResponse", "WebSocket", "AsyncWebSocket", "WebSocketMessage", "Error", "available_profiles", "TlsOptions", "Http2Options", "Identity", "MultipartData", "MultipartFile", "MultipartPart"]
