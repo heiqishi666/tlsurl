@@ -2,11 +2,14 @@
 
 Rust-powered HTTP client with native Python and Node.js bindings, based on wreq.
 
-This repository adds a shared binding layer and prebuilt-package workflows. The initial
-bindings support buffered HTTP requests; browser profiles and advanced TLS/HTTP2 binding
-options are not implemented yet. Packages have not been published to PyPI or npm.
+This repository provides a shared Rust core with synchronous/asynchronous Python APIs
+and Promise-based Node.js APIs. Bindings include browser profiles, TLS/HTTP2 configuration,
+JSON/form/multipart requests, streaming downloads and file uploads, cancellation and WebSocket.
+Packages have not been published to PyPI or npm yet; CI produces installable wheels and npm tarballs.
 
-See [native bindings, build instructions and compatibility](docs/native-bindings.md).
+See [API and build instructions](docs/native-bindings.md),
+[platform support and artifact audits](docs/platform-support.md), and
+[validation scope](docs/validation.md).
 The protocol implementation and its original documentation below are retained from upstream.
 
 <!-- Modified for tlsurl: add binding status and documentation without replacing upstream details. -->
