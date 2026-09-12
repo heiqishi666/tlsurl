@@ -6,6 +6,8 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use wreq::cookie::IntoCookie;
 mod protocol;
+pub mod stream;
+pub use stream::StreamResponse;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -264,6 +266,36 @@ impl Client {
         body: Option<Vec<u8>>,
         options: RequestOptions,
     ) -> Result<Response, Error> {
+        let response = self
+            .stream_with_options(method, url, headers, body, options)
+            .await?;
+        let mut body = Vec::new();
+        while let Some(chunk) = response.next_chunk().await? {
+            if chunk.len() > self.max_response_bytes.saturating_sub(body.len()) {
+                return Err(Error {
+                    code: "BODY_TOO_LARGE",
+                    message: format!("response exceeds {} bytes", self.max_response_bytes),
+                });
+            }
+            body.extend_from_slice(&chunk);
+        }
+        Ok(Response {
+            status: response.head.status,
+            http_version: response.head.http_version.clone(),
+            url: response.head.url.clone(),
+            headers: response.head.headers.clone(),
+            body,
+        })
+    }
+
+    pub async fn stream_with_options(
+        &self,
+        method: String,
+        url: String,
+        headers: Vec<(String, Vec<u8>)>,
+        body: Option<Vec<u8>>,
+        options: RequestOptions,
+    ) -> Result<StreamResponse, Error> {
         let method = wreq::Method::from_bytes(method.as_bytes()).map_err(|error| Error {
             code: "INVALID_REQUEST",
             message: error.to_string(),
@@ -351,25 +383,16 @@ impl Client {
             .iter()
             .map(|(name, value)| (name.to_string(), value.as_bytes().to_vec()))
             .collect();
-        let mut stream = response.bytes_stream();
-        let mut body = Vec::new();
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
-            if chunk.len() > self.max_response_bytes.saturating_sub(body.len()) {
-                return Err(Error {
-                    code: "BODY_TOO_LARGE",
-                    message: format!("response exceeds {} bytes", self.max_response_bytes),
-                });
-            }
-            body.extend_from_slice(&chunk);
-        }
-        Ok(Response {
-            status,
-            http_version,
-            url,
-            headers,
-            body,
-        })
+        Ok(StreamResponse::new(
+            Response {
+                status,
+                http_version,
+                url,
+                headers,
+                body: Vec::new(),
+            },
+            response.bytes_stream().boxed(),
+        ))
     }
 }
 

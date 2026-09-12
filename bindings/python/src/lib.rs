@@ -1,4 +1,5 @@
 use pyo3::{exceptions::PyRuntimeError, prelude::*, types::PyBytes};
+use std::sync::Arc;
 
 fn py_error(error: tlsurl_core::Error) -> PyErr {
     PyRuntimeError::new_err(error.to_string())
@@ -38,6 +39,54 @@ impl Response {
             .iter()
             .map(|(name, value)| (name.clone(), PyBytes::new(py, value)))
             .collect()
+    }
+}
+
+#[pyclass(module = "tlsurl._native")]
+struct StreamResponse {
+    inner: Arc<tlsurl_core::StreamResponse>,
+}
+
+#[pymethods]
+impl StreamResponse {
+    #[getter]
+    fn status(&self) -> u16 {
+        self.inner.head.status
+    }
+    #[getter]
+    fn http_version(&self) -> &str {
+        &self.inner.head.http_version
+    }
+    #[getter]
+    fn url(&self) -> &str {
+        &self.inner.head.url
+    }
+    #[getter]
+    fn headers<'py>(&self, py: Python<'py>) -> Vec<(String, Bound<'py, PyBytes>)> {
+        self.inner
+            .head
+            .headers
+            .iter()
+            .map(|(name, value)| (name.clone(), PyBytes::new(py, value)))
+            .collect()
+    }
+    fn close(&self) {
+        self.inner.close();
+    }
+    fn next_chunk<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        let chunk = py
+            .detach(|| pyo3_async_runtimes::tokio::get_runtime().block_on(self.inner.next_chunk()))
+            .map_err(py_error)?;
+        Ok(chunk.map(|chunk| PyBytes::new(py, &chunk)))
+    }
+    fn next_chunk_async<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let chunk = inner.next_chunk().await.map_err(py_error)?;
+            Ok(Python::attach(|py| {
+                chunk.map(|chunk| PyBytes::new(py, &chunk).unbind())
+            }))
+        })
     }
 }
 
@@ -119,6 +168,53 @@ impl Client {
                 .map_err(py_error)
         })
     }
+    #[pyo3(signature = (method, url, headers=None, body=None, options=None))]
+    fn stream(
+        &self,
+        py: Python<'_>,
+        method: String,
+        url: String,
+        headers: Option<Vec<(String, Vec<u8>)>>,
+        body: Option<Vec<u8>>,
+        options: Option<String>,
+    ) -> PyResult<StreamResponse> {
+        let options = tlsurl_core::parse_options(options.as_deref()).map_err(py_error)?;
+        py.detach(|| {
+            pyo3_async_runtimes::tokio::get_runtime().block_on(self.inner.stream_with_options(
+                method,
+                url,
+                headers.unwrap_or_default(),
+                body,
+                options,
+            ))
+        })
+        .map(|inner| StreamResponse {
+            inner: Arc::new(inner),
+        })
+        .map_err(py_error)
+    }
+    #[pyo3(signature = (method, url, headers=None, body=None, options=None))]
+    fn stream_async<'py>(
+        &self,
+        py: Python<'py>,
+        method: String,
+        url: String,
+        headers: Option<Vec<(String, Vec<u8>)>>,
+        body: Option<Vec<u8>>,
+        options: Option<String>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let options = tlsurl_core::parse_options(options.as_deref()).map_err(py_error)?;
+        let client = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            client
+                .stream_with_options(method, url, headers.unwrap_or_default(), body, options)
+                .await
+                .map(|inner| StreamResponse {
+                    inner: Arc::new(inner),
+                })
+                .map_err(py_error)
+        })
+    }
 }
 
 #[pyfunction]
@@ -131,5 +227,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(available_profiles, module)?)?;
     module.add_class::<Client>()?;
     module.add_class::<Response>()?;
+    module.add_class::<StreamResponse>()?;
     Ok(())
 }

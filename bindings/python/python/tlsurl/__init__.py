@@ -20,7 +20,7 @@ def _error(error):
     return Error(code if separator else "REQUEST", message if separator else str(error))
 
 
-class Response:
+class _ResponseHead:
     def __init__(self, native):
         self._native = native
 
@@ -40,6 +40,13 @@ class Response:
     def headers(self):
         return self._native.headers
 
+    def raise_for_status(self):
+        if 400 <= self.status < 600:
+            raise Error("HTTP_STATUS", f"HTTP status {self.status}")
+        return self
+
+
+class Response(_ResponseHead):
     @property
     def body(self):
         return self._native.body
@@ -50,10 +57,62 @@ class Response:
     def json(self):
         return _json.loads(self.body)
 
-    def raise_for_status(self):
-        if 400 <= self.status < 600:
-            raise Error("HTTP_STATUS", f"HTTP status {self.status}")
+
+class StreamResponse(_ResponseHead):
+    def next_chunk(self):
+        try:
+            return self._native.next_chunk()
+        except RuntimeError as error:
+            self.close()
+            raise _error(error) from None
+        except BaseException:
+            self.close()
+            raise
+
+    async def next_chunk_async(self):
+        try:
+            return await self._native.next_chunk_async()
+        except RuntimeError as error:
+            self.close()
+            raise _error(error) from None
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        self._native.close()
+
+    def __iter__(self):
+        try:
+            while True:
+                chunk = self.next_chunk()
+                if chunk is None:
+                    return
+                yield chunk
+        finally:
+            self.close()
+
+    async def __aiter__(self):
+        try:
+            while True:
+                chunk = await self.next_chunk_async()
+                if chunk is None:
+                    return
+                yield chunk
+        finally:
+            self.close()
+
+    def __enter__(self):
         return self
+
+    def __exit__(self, *_):
+        self.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        self.close()
 
 
 def _pairs(value):
@@ -131,6 +190,22 @@ class Client:
         except RuntimeError as error:
             raise _error(error) from None
 
+    def stream(self, method, url, headers=None, body=None, **options):
+        client = self._get_client()
+        headers, body, config = _prepare(headers, body, **options)
+        try:
+            return StreamResponse(client.stream(method, url, headers, body, config))
+        except RuntimeError as error:
+            raise _error(error) from None
+
+    async def stream_async(self, method, url, headers=None, body=None, **options):
+        client = self._get_client()
+        headers, body, config = _prepare(headers, body, **options)
+        try:
+            return StreamResponse(await client.stream_async(method, url, headers, body, config))
+        except RuntimeError as error:
+            raise _error(error) from None
+
     def get(self, url, **options):
         return self.request("GET", url, **options)
 
@@ -164,6 +239,9 @@ class Client:
 
 
 class AsyncClient(Client):
+    async def stream(self, method, url, headers=None, body=None, **options):
+        return await self.stream_async(method, url, headers, body, **options)
+
     async def request(self, method, url, headers=None, body=None, **options):
         return await self.request_async(method, url, headers, body, **options)
 
@@ -175,4 +253,4 @@ class AsyncClient(Client):
         self.close()
 
 
-__all__ = ["Client", "AsyncClient", "Response", "Error", "available_profiles"]
+__all__ = ["Client", "AsyncClient", "Response", "StreamResponse", "Error", "available_profiles"]

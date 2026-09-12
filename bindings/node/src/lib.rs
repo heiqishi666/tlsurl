@@ -1,5 +1,6 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use std::sync::Arc;
 
 #[napi(object)]
 pub struct Cookie {
@@ -20,6 +21,79 @@ pub struct Response {
     pub url: String,
     pub headers: Vec<Header>,
     pub body: Buffer,
+}
+
+#[napi]
+pub struct Cancellation {
+    token: tlsurl_core::stream::CancellationToken,
+}
+
+#[napi]
+impl Cancellation {
+    #[napi(constructor)]
+    pub fn new() -> Self {
+        Self {
+            token: tlsurl_core::stream::CancellationToken::new(),
+        }
+    }
+    #[napi]
+    pub fn cancel(&self) {
+        self.token.cancel();
+    }
+}
+
+impl Default for Cancellation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[napi]
+pub struct StreamResponse {
+    inner: Arc<tlsurl_core::StreamResponse>,
+}
+
+#[napi]
+impl StreamResponse {
+    #[napi(getter)]
+    pub fn status(&self) -> u16 {
+        self.inner.head.status
+    }
+    #[napi(getter)]
+    pub fn http_version(&self) -> String {
+        self.inner.head.http_version.clone()
+    }
+    #[napi(getter)]
+    pub fn url(&self) -> String {
+        self.inner.head.url.clone()
+    }
+    #[napi(getter)]
+    pub fn headers(&self) -> Vec<Header> {
+        self.inner
+            .head
+            .headers
+            .iter()
+            .map(|(name, value)| Header {
+                name: name.clone(),
+                value: value.clone().into(),
+            })
+            .collect()
+    }
+    #[napi]
+    pub fn close(&self) {
+        self.inner.close();
+    }
+    #[napi]
+    pub fn next_chunk<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Option<Buffer>>> {
+        let inner = self.inner.clone();
+        env.spawn_future(async move {
+            inner
+                .next_chunk()
+                .await
+                .map(|value| value.map(Buffer::from))
+                .map_err(|error| Error::from_reason(error.to_string()))
+        })
+    }
 }
 
 #[napi]
@@ -82,6 +156,7 @@ impl Client {
     }
 
     #[napi]
+    #[allow(clippy::too_many_arguments)] // Explicit native ABI; public API uses RequestOptions.
     pub fn request<'env>(
         &self,
         env: &'env Env,
@@ -90,6 +165,7 @@ impl Client {
         headers: Option<Vec<Header>>,
         body: Option<Buffer>,
         options: Option<String>,
+        cancellation: &Cancellation,
     ) -> Result<PromiseRaw<'env, Response>> {
         let options = tlsurl_core::parse_options(options.as_deref())
             .map_err(|error| Error::from_reason(error.to_string()))?;
@@ -101,11 +177,14 @@ impl Client {
         // Copy mutable JS buffers before handing the request to a worker thread.
         let body = body.map(|body| body.to_vec());
         let client = self.inner.clone();
+        let token = cancellation.token.clone();
         env.spawn_future(async move {
-            let response = client
-                .request_with_options(method, url, headers, body, options)
-                .await
-                .map_err(|error| Error::from_reason(error.to_string()))?;
+            let response = tlsurl_core::stream::cancellable(
+                &token,
+                client.request_with_options(method, url, headers, body, options),
+            )
+            .await
+            .map_err(|error| Error::from_reason(error.to_string()))?;
             Ok(Response {
                 status: response.status,
                 http_version: response.http_version,
@@ -120,6 +199,40 @@ impl Client {
                     .collect(),
                 body: response.body.into(),
             })
+        })
+    }
+    #[napi]
+    #[allow(clippy::too_many_arguments)] // Explicit native ABI; public API uses RequestOptions.
+    pub fn stream<'env>(
+        &self,
+        env: &'env Env,
+        method: String,
+        url: String,
+        headers: Option<Vec<Header>>,
+        body: Option<Buffer>,
+        options: Option<String>,
+        cancellation: &Cancellation,
+    ) -> Result<PromiseRaw<'env, StreamResponse>> {
+        let options = tlsurl_core::parse_options(options.as_deref())
+            .map_err(|error| Error::from_reason(error.to_string()))?;
+        let headers = headers
+            .unwrap_or_default()
+            .into_iter()
+            .map(|h| (h.name, h.value.to_vec()))
+            .collect();
+        let body = body.map(|b| b.to_vec());
+        let client = self.inner.clone();
+        let token = cancellation.token.clone();
+        env.spawn_future(async move {
+            tlsurl_core::stream::cancellable(
+                &token,
+                client.stream_with_options(method, url, headers, body, options),
+            )
+            .await
+            .map(|inner| StreamResponse {
+                inner: Arc::new(inner),
+            })
+            .map_err(|error| Error::from_reason(error.to_string()))
         })
     }
 }

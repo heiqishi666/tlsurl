@@ -699,5 +699,7 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.Cancellation = nativeBinding.Cancellation
 module.exports.Client = nativeBinding.Client
+module.exports.StreamResponse = nativeBinding.StreamResponse
 module.exports.availableProfiles = nativeBinding.availableProfiles

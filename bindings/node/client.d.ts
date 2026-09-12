@@ -47,6 +47,7 @@ export interface MultipartPart {
   contentType?: string
 }
 export interface RequestOptions {
+  signal?: AbortSignal
   headers?: Header[] | Record<string, string | Uint8Array>
   body?: string | Uint8Array
   json?: unknown
@@ -70,11 +71,22 @@ export class Response {
   json(): unknown
   raiseForStatus(): this
 }
+export class StreamResponse implements AsyncIterable<Buffer> {
+  readonly status: number
+  readonly httpVersion: string
+  readonly url: string
+  readonly headers: {name: string; value: Buffer}[]
+  nextChunk(): Promise<Buffer | null>
+  close(): void
+  raiseForStatus(): this
+  [Symbol.asyncIterator](): AsyncIterator<Buffer>
+}
 export class Client {
   constructor(options?: ClientOptions)
   constructor(timeoutMs?: number, maxResponseBytes?: number)
   request(method: string, url: string, options?: RequestOptions): Promise<Response>
   request(method: string, url: string, headers?: Header[] | null, body?: Uint8Array): Promise<Response>
+  stream(method: string, url: string, options?: RequestOptions): Promise<StreamResponse>
   get(url: string, options?: RequestOptions): Promise<Response>
   post(url: string, options?: RequestOptions): Promise<Response>
   clearCookies(): void
@@ -82,5 +94,5 @@ export class Client {
   cookies(url: string): {name: string; value: string}[]
   close(): void
 }
-declare const bindings: { Client: typeof Client; Response: typeof Response; TlsurlError: typeof TlsurlError; availableProfiles: typeof availableProfiles }
+declare const bindings: { Client: typeof Client; Response: typeof Response; StreamResponse: typeof StreamResponse; TlsurlError: typeof TlsurlError; availableProfiles: typeof availableProfiles }
 export default bindings

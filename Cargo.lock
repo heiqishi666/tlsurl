@@ -3222,9 +3222,12 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 name = "tlsurl-core"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "futures-util",
  "serde",
  "serde_json",
+ "tokio",
+ "tokio-util",
  "url",
  "wreq",
  "wreq-util",
@@ -3350,6 +3353,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "libc",
  "pin-project-lite",
  "tokio",

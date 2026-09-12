@@ -22,6 +22,34 @@ class Response {
     return this
   }
 }
+class StreamResponse {
+  constructor(value, cleanup) {
+    this._native = value
+    this._cleanup = cleanup
+    this.status = value.status
+    this.httpVersion = value.httpVersion
+    this.url = value.url
+    this.headers = value.headers
+  }
+  raiseForStatus() { return Response.prototype.raiseForStatus.call(this) }
+  async nextChunk() {
+    try {
+      const chunk = await this._native.nextChunk()
+      if (chunk == null) this._cleanup()
+      return chunk
+    } catch (error) { this.close(); throw convertError(error) }
+  }
+  close() { this._native.close(); this._cleanup() }
+  async *[Symbol.asyncIterator]() {
+    try {
+      for (;;) {
+        const chunk = await this.nextChunk()
+        if (chunk == null) return
+        yield chunk
+      }
+    } finally { this.close() }
+  }
+}
 const clientKeys = {
   connectTimeoutMs: 'connect_timeout_ms', readTimeoutMs: 'read_timeout_ms',
   proxy: 'proxy', verify: 'verify', caPem: 'ca_pem', maxRedirects: 'max_redirects',
@@ -62,11 +90,15 @@ class Client {
       this._native = new native.Client(timeoutMs, maxResponseBytes, JSON.stringify(optionsJson(options, clientKeys)))
     } catch (error) { throw convertError(error) }
   }
-  async request(method, url, headersOrOptions = [], legacyBody) {
+  request(method, url, headersOrOptions = [], legacyBody) {
+    return this._send(false, method, url, headersOrOptions, legacyBody)
+  }
+  stream(method, url, options = {}) { return this._send(true, method, url, options) }
+  async _send(streaming, method, url, headersOrOptions, legacyBody) {
     if (!this._native) throw new TlsurlError('CLOSED', 'client is closed')
     const options = Array.isArray(headersOrOptions) || headersOrOptions == null
       ? { headers: headersOrOptions || [], body: legacyBody } : headersOrOptions
-    const { headers = [], body: rawBody, json, form, multipart, params, ...rest } = options
+    const { headers = [], body: rawBody, json, form, multipart, params, signal, ...rest } = options
     const hasJson = Object.hasOwn(options, 'json')
     if ([rawBody !== undefined && rawBody !== null, hasJson, form !== undefined && form !== null, multipart != null].filter(Boolean).length > 1) {
       throw new TlsurlError('INVALID_REQUEST', 'body, json, form and multipart are mutually exclusive')
@@ -98,9 +130,26 @@ class Client {
       })
       body = Buffer.concat(chunks)
     }
+    if (signal != null && !(signal instanceof AbortSignal)) throw new TlsurlError('INVALID_CONFIG', 'signal must be an AbortSignal')
+    const cancellation = new native.Cancellation()
+    let streamRef
+    const abort = () => { cancellation.cancel(); streamRef?.deref()?.close() }
+    const cleanup = () => signal?.removeEventListener('abort', abort)
+    signal?.addEventListener('abort', abort, { once: true })
+    if (signal?.aborted) abort()
     try {
-      return new Response(await this._native.request(method, url, normalized, body, JSON.stringify(requestOptions)))
-    } catch (error) { throw convertError(error) }
+      const result = await this._native[streaming ? 'stream' : 'request'](method, url, normalized, body, JSON.stringify(requestOptions), cancellation)
+      if (signal?.aborted) {
+        if (streaming) result.close()
+        throw new TlsurlError('CANCELLED', 'operation cancelled')
+      }
+      if (streaming) {
+        streamRef = new WeakRef(result)
+        return new StreamResponse(result, cleanup)
+      }
+      cleanup()
+      return new Response(result)
+    } catch (error) { cleanup(); throw convertError(error) }
   }
   get(url, options) { return this.request('GET', url, options) }
   post(url, options) { return this.request('POST', url, options) }
@@ -118,4 +167,4 @@ class Client {
   }
   close() { this._native = null }
 }
-module.exports = { Client, Response, TlsurlError, availableProfiles: native.availableProfiles }
+module.exports = { Client, Response, StreamResponse, TlsurlError, availableProfiles: native.availableProfiles }
