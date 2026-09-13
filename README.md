@@ -9,7 +9,7 @@ tlsurl 基于 [wreq](https://github.com/penumbra-x/rquest) 的协议实现，通
 
 项目目标是让使用者安装对应平台的工件即可调用，无需自行编译 Rust 或 BoringSSL。协议能力集中在核心实现，两种语言保留各自常用的调用方式。
 
-> 当前为开发预览。**尚未正式发布到 PyPI/npm**，请先使用 GitHub Actions 生成的工件；不要将 `pip install tlsurl` 或 `npm install tlsurl` 当作当前可用的安装入口。发布准备和账号配置见[发布说明](docs/publishing.md)。
+> 当前为开发预览。**Python 0.1.0 已发布到 [PyPI](https://pypi.org/project/tlsurl/0.1.0/)**；npm 尚未发布，Node.js 请使用 GitHub Actions 工件，不要将 `npm install tlsurl` 当作当前可用入口。发布配置见[发布说明](docs/publishing.md)。
 
 ## 功能
 
@@ -94,7 +94,15 @@ Node.js 使用 `new Client({ tls: { ... } })`，对应字段为 `minVersion`、`
 
 尚未提供 Alpine/musl、Windows ARM64、32 位、移动系统、PyPy 或 free-threaded Python 工件。上述构建与版本矩阵不等于最低系统版本和所有旧 CPU 都经过实机测试，详情见[平台支持](docs/platform-support.md)。
 
-## 安装开发预览工件
+## 从 PyPI 安装 Python 包
+
+```shell
+python -m pip install --only-binary=:all: --index-url https://pypi.org/simple tlsurl==0.1.0
+```
+
+安装后可直接使用上面的 Python 示例，无需编译 Rust。`--only-binary=:all:` 确保只安装预编译 wheel；若当前系统没有匹配工件，会直接报错。支持范围见上方平台表。
+
+## 下载 GitHub 工件（Node.js / Python 离线安装）
 
 ### 1. 下载
 
