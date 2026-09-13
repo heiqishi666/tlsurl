@@ -74,6 +74,18 @@ Cookie 按上游域、路径、Secure 和过期规则接受与选择；`set_cook
 
 `close()` 释放客户端持有的连接池引用并拒绝新请求；已经提交的请求可继续完成。Python 支持 `with Client()` / `async with AsyncClient()`。单独请求可通过 Python asyncio 取消或 Node AbortSignal 中止；流式响应拥有独立 close。
 
+## 一键随机 TLS
+
+Python `Client(random_tls=True)` / Node `new Client({randomTls: true})` 在创建客户端时生成一次 TLS 配置，同样适用于 Python AsyncClient。可选 `random_tls_seed` / `randomTlsSeed` 为无符号 32 位整数，用于同版本跨语言复现；不传时使用系统随机源。种子只影响公开握手配置，不参与 TLS 密钥生成。
+
+随机模式限制为 TLS 1.2/1.3，保留 RSA/ECDSA 的 AES128-GCM 基础套件，在现代套件中随机选择附加项，并排列密码套件、曲线和签名算法。扩展自动排列关闭，AES 偏好固定，关闭 session ticket，避免硬件或恢复会话改变预期指纹。TLS 1.3 套件由底层默认提供。
+
+`random_tls=true` 与 `tls`、`profile`、`platform` 互斥；未启用随机模式却设置种子也报 `INVALID_CONFIG`。代理、证书验证、CA、mTLS、HTTP/2 和超时仍可独立配置。未启用随机模式时原有行为不变。
+
+客户端不会每次请求更换配置；新建无种子客户端才重新随机。相同种子在相同版本、SNI/ALPN 条件下复现，不能承诺不同种子绝不碰撞或跨 TLS 库版本保持哈希。JA3/JA4 是实际 ClientHello 的摘要，本接口不接收任意目标哈希。服务端是否接受取决于协议兼容性与自身策略。
+
+协议测试通过本地转发捕获真实 ClientHello，独立计算 JA3/JA4；验证 16 个种子的变化、每客户端多次新连接稳定性、Python/Node 一致性，以及 TLS 1.2/1.3 握手和冲突配置拒绝。
+
 ## TLS / HTTP 配置
 
 Python 客户端接受 `tls={...}`、`http2={...}`、`identity={...}`；Node 接受对应对象，字段使用 camelCase。响应 `http_version` / `httpVersion` 表示实际收到的 HTTP 协议版本。

@@ -3,7 +3,7 @@
 [![Native packages](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml/badge.svg)](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
-**基于 Rust 的 HTTP 客户端，为 Python 和 Node.js 提供跨平台预编译包。**
+**支持自定义 TLS 指纹与一键随机 JA3 / JA4 的 Rust HTTP 客户端，提供 Python 和 Node.js 跨平台预编译包。**
 
 tlsurl 基于 [wreq](https://github.com/penumbra-x/rquest) 的协议实现，通过共享 Rust 核心提供 Python 同步/异步接口与 Node.js Promise 接口。可以发送常规 HTTP 请求，也可以配置 TLS、HTTP/2 和浏览器预设，处理流式下载、文件上传及 WebSocket 通信。
 
@@ -14,6 +14,7 @@ tlsurl 基于 [wreq](https://github.com/penumbra-x/rquest) 的协议实现，通
 ## 功能
 
 - **请求与会话**：GET/POST 等 HTTP 方法、查询参数、JSON、Form、Multipart、重复 Header、Basic/Bearer 认证、Cookie 管理、重定向和显式代理。
+- **自定义 TLS 指纹**：配置密码套件、曲线、签名算法、ALPN、GREASE 与扩展排列；支持一键随机配置和种子复现。
 - **TLS 与 HTTP/2**：证书校验、自定义 CA、mTLS、TLS 版本、ALPN、密码套件、曲线与 HTTP/2 参数配置。
 - **浏览器预设**：使用 wreq-util 提供的 Chrome、Firefox、Safari 等预设，可查询实际可用名称并覆盖配置。
 - **流式传输**：按需读取响应、流式文件上传、背压、超时和主动取消。
@@ -22,6 +23,64 @@ tlsurl 基于 [wreq](https://github.com/penumbra-x/rquest) 的协议实现，通
 - **预编译分发**：Python wheel；npm 主包自动选择对应平台的原生包。CI 检查安装、协议行为、二进制依赖、版本和工件哈希。
 
 浏览器预设用于配置协议行为，不保证与真实浏览器所有行为完全一致，也不保证任意服务端都接受请求。
+
+## 一键随机 TLS 指纹
+
+Python：
+
+```python
+from tlsurl import Client
+
+with Client(random_tls=True) as client:
+    response = client.get("https://example.com")
+    print(response.status)
+```
+
+Node.js：
+
+```javascript
+import { Client } from 'tlsurl'
+
+const client = new Client({ randomTls: true })
+try {
+  console.log((await client.get('https://example.com')).status)
+} finally {
+  client.close()
+}
+```
+
+需要复现某组配置时，使用 Python `Client(random_tls=True, random_tls_seed=42)` 或 Node.js `new Client({ randomTls: true, randomTlsSeed: 42 })`。种子范围为 `0`～`4294967295`，只能与随机模式一起使用。
+
+- **每个 Client 生成一次配置**，连接池复用不会重新生成；需要换一组配置就新建 Client。未传种子时使用系统随机源。
+- 随机选择现代密码套件组合，并排列套件、曲线与签名算法；同时改变影响 JA3 和 JA4 的字段。保留 TLS 1.2/1.3、RSA/ECDSA 兼容套件和证书校验。
+- 随机模式与 `tls`、`profile`、`platform` 互斥，混用会报 `INVALID_CONFIG`。可以继续设置代理、CA、HTTP/2 参数、超时等。
+- 同版本、同种子、同 SNI/ALPN 条件下可复现指纹配置；TLS 密钥和握手随机数仍由 TLS 库安全生成。不同种子可能出现相同指纹，不保证全局唯一；升级底层 TLS 库后也不保证指纹不变。
+
+[JA3](https://github.com/salesforce/ja3) 和 [JA4](https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4.md) 是服务端从 ClientHello 计算出的摘要。这里改变的是实际握手参数，不能将任意 JA3/JA4 哈希字符串直接指定为握手结果。JA4 会对密码套件和扩展排序，因此仅打乱扩展顺序并不足以改变 JA4。随机配置不等同于真实浏览器预设，也不保证服务端接受。
+
+## 手工自定义 TLS 指纹
+
+需要精确控制时，直接指定握手参数：
+
+```python
+from tlsurl import Client
+
+with Client(tls={
+    "min_version": "1.2",
+    "max_version": "1.3",
+    "alpn": ["h2", "http/1.1"],
+    "cipher_list": "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256",
+    "curves_list": "X25519:P-256:P-384",
+    "sigalgs_list": "ecdsa_secp256r1_sha256:rsa_pss_rsae_sha256:rsa_pkcs1_sha256",
+    "grease": True,
+    "permute_extensions": True,
+}) as client:
+    print(client.get("https://example.com").status)
+```
+
+Node.js 使用 `new Client({ tls: { ... } })`，对应字段为 `minVersion`、`maxVersion`、`alpn`、`cipherList`、`curvesList`、`sigalgsList`、`grease`、`permuteExtensions`。列表字符串使用 BoringSSL 格式；TLS 1.3 密码套件还有底层默认规则，不能把配置字符串当作完整 ClientHello。完整字段及优先级见 [TLS / HTTP 配置](docs/native-bindings.md#tls--http-配置)。
+
+想以浏览器配置为基础，可以使用 `profile="chrome_149"`，再通过 `tls` / `http2` 覆盖所需字段；未覆盖字段保留预设值。
 
 ## 支持平台
 
