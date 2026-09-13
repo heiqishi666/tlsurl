@@ -11,6 +11,17 @@ tlsurl 基于 [wreq](https://github.com/penumbra-x/rquest) 的协议实现，通
 
 > 当前为开发预览。**Python 0.1.0 已发布到 [PyPI](https://pypi.org/project/tlsurl/0.1.0/)**；npm 尚未发布，Node.js 请使用仓库 [bin/node/0.1.0](bin/node/0.1.0) 中的预编译包，不要将 `npm install tlsurl` 当作当前可用入口。发布配置见[发布说明](docs/publishing.md)。
 
+## 教程与文档
+
+从 [文档索引](docs/README.md) 按场景查找用法：
+
+| 语言 | 教程 |
+| --- | --- |
+| Python | [安装、请求、Header/参数、Cookie、连续会话、TLS 指纹与异步](docs/python-tutorial.md) |
+| Node.js | [安装、请求、Header/参数、Cookie、连续会话、TLS 指纹与并发](docs/node-tutorial.md) |
+
+每份教程均有章节目录和可独立运行的代码示例；完整配置边界见 [API 文档](docs/native-bindings.md)。
+
 ## 功能
 
 - **请求与会话**：GET/POST 等 HTTP 方法、查询参数、JSON、Form、Multipart、重复 Header、Basic/Bearer 认证、Cookie 管理、重定向和显式代理。

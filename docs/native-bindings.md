@@ -1,7 +1,9 @@
 # tlsurl 原生绑定
 
 基于上游 wreq 提交 `12ccf64bb00e79db6eabd4bc3ccf82871d3eb5a5`。
-保留根 crate 名称和 API，新增共享核心及两种语言绑定。当前版本是开发预览，尚未发布到 PyPI/npm。
+保留根 crate 名称和 API，新增共享核心及两种语言绑定。Python 0.1.0 已发布 PyPI；Node 从仓库 bin 目录分发，npm 尚未发布。
+
+入门请先看 [文档索引](README.md)、[Python 教程](python-tutorial.md) 或 [Node.js 教程](node-tutorial.md)，本文侧重 API 边界和实现说明。
 
 ## 已实现的接口
 
@@ -20,8 +22,9 @@
 ```python
 from tlsurl import Client, AsyncClient
 
-response = Client().request("GET", "https://example.com")
-print(response.status, response.body.decode("utf-8"))
+with Client() as client:
+    response = client.request("GET", "https://example.com")
+    print(response.status, response.body.decode("utf-8"))
 
 # 在 asyncio 事件循环中：
 # response = await AsyncClient().request("GET", "https://example.com")
@@ -29,11 +32,14 @@ print(response.status, response.body.decode("utf-8"))
 
 ```javascript
 import { Client } from 'tlsurl'
-const response = await new Client().request('GET', 'https://example.com')
-console.log(response.status, response.body.toString('utf8'))
+const client = new Client()
+try {
+  const response = await client.request('GET', 'https://example.com')
+  console.log(response.status, response.body.toString('utf8'))
+} finally { client.close() }
 ```
 
-响应 Header 的 value 在 Python 中是 bytes，在 Node 中是 Buffer，避免有损文本转换。请求 Header 同样使用 bytes/Buffer。
+响应 Header 的 value 在 Python 中是 bytes，在 Node 中是 Buffer，避免有损文本转换。请求 Header 也支持字符串，语言层转换为 bytes/Buffer。
 HTTP/1 请求保留自定义 Header 名称大小写；上游会将同名重复字段分组，并采用首次出现的名称拼写，不能保证同名字段分别使用不同大小写或任意交错顺序。响应名称采用上游解析后的形式。
 缓冲响应可以反复访问 body；流式响应使用独立对象和一次消费语义。
 
@@ -259,7 +265,7 @@ python tests/bindings/smoke.py --node-module dist/consumer/node_modules/tlsurl
 - 随后提交 `f80c2806` 的五平台 CI 已全部通过，包含 Linux/macOS 实际构建、CPython 3.13/Node 24 安装与协议测试：[运行记录](https://github.com/heiqishi666/tlsurl/actions/runs/34705604255)。后续基础请求与 TLS 配置批次分别通过完整 31 作业矩阵：[基础请求](https://github.com/heiqishi666/tlsurl/actions/runs/34708937263)、[TLS 配置](https://github.com/heiqishi666/tlsurl/actions/runs/34709361700)。浏览器预设与流式批次以各自新运行记录为准。
 - 上游 dev-dependency `sysinfo 0.39.x` 声明 Rust 1.95；本轮未改动上游依赖，也未用 Rust 1.94 宣称全仓 `cargo test --workspace` 通过。绑定构建不依赖该 benchmark 依赖。
 
-工作流只生成 GitHub Actions 工件，不上传 PyPI/npm。正式发布时必须先上传所有平台 npm 包，核验可下载后再上传主包，避免用户安装时缺少对应的可选依赖。聚合包的安装前提是保留 optionalDependencies，不能使用 `--omit=optional`。
+Native packages 工作流生成 GitHub 工件，独立的 Publish native packages 工作流可选择 PyPI、npm 或两者。Python 0.1.0 已完成 PyPI 五平台公开安装验收，Node 包已收录于仓库 bin；发布记录见 [发布说明](publishing.md)。选择 npm 发布时先上传全部平台包再上传主包，避免缺少可选依赖。聚合包的安装前提是保留 optionalDependencies，不能使用 `--omit=optional`。
 上游自带 CI/发布流程尚未改造，不要推送版本标签触发原 wreq 发布任务。
 
 原代码及协议来自 wreq/reqwest；所有分发包保留 Apache-2.0 LICENSE。
