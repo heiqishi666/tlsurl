@@ -1,143 +1,205 @@
 # tlsurl
 
-Rust-powered HTTP client with native Python and Node.js bindings, based on wreq.
+[![Native packages](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml/badge.svg)](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
-This repository provides a shared Rust core with synchronous/asynchronous Python APIs
-and Promise-based Node.js APIs. Bindings include browser profiles, TLS/HTTP2 configuration,
-JSON/form/multipart requests, streaming downloads and file uploads, cancellation and WebSocket.
-Packages have not been published to PyPI or npm yet; CI produces installable wheels and npm tarballs.
+**基于 Rust 的 HTTP 客户端，为 Python 和 Node.js 提供跨平台预编译包。**
 
-See [API and build instructions](docs/native-bindings.md),
-[platform support and artifact audits](docs/platform-support.md), and
-[validation scope](docs/validation.md).
-The protocol implementation and its original documentation below are retained from upstream.
+tlsurl 基于 [wreq](https://github.com/penumbra-x/rquest) 的协议实现，通过共享 Rust 核心提供 Python 同步/异步接口与 Node.js Promise 接口。可以发送常规 HTTP 请求，也可以配置 TLS、HTTP/2 和浏览器预设，处理流式下载、文件上传及 WebSocket 通信。
 
-<!-- Modified for tlsurl: add binding status and documentation without replacing upstream details. -->
+项目目标是让使用者安装对应平台的工件即可调用，无需自行编译 Rust 或 BoringSSL。协议能力集中在核心实现，两种语言保留各自常用的调用方式。
 
-## Upstream wreq
+> 当前为开发预览。**尚未正式发布到 PyPI/npm**，请先使用 GitHub Actions 生成的工件；不要将 `pip install tlsurl` 或 `npm install tlsurl` 当作当前可用的安装入口。发布准备和账号配置见[发布说明](docs/publishing.md)。
 
-[![CI](https://github.com/0x676e67/wreq/actions/workflows/ci.yml/badge.svg)](https://github.com/0x676e67/wreq/actions/workflows/ci.yml)
-[![Crates.io License](https://img.shields.io/crates/l/wreq)](https://github.com/0x676e67/wreq/blob/main/LICENSE)
-[![Crates.io MSRV](https://img.shields.io/crates/msrv/wreq?logo=rust)](https://crates.io/crates/wreq)
-[![crates.io](https://img.shields.io/crates/v/wreq.svg?logo=rust)](https://crates.io/crates/wreq)
-[![Discord chat][discord-badge]][discord-url]
+## 功能
 
-[discord-badge]: https://img.shields.io/discord/1486741856397164788.svg?logo=discord
-[discord-url]: https://discord.gg/rfbvyFkgq3
+- **请求与会话**：GET/POST 等 HTTP 方法、查询参数、JSON、Form、Multipart、重复 Header、Basic/Bearer 认证、Cookie 管理、重定向和显式代理。
+- **TLS 与 HTTP/2**：证书校验、自定义 CA、mTLS、TLS 版本、ALPN、密码套件、曲线与 HTTP/2 参数配置。
+- **浏览器预设**：使用 wreq-util 提供的 Chrome、Firefox、Safari 等预设，可查询实际可用名称并覆盖配置。
+- **流式传输**：按需读取响应、流式文件上传、背压、超时和主动取消。
+- **WebSocket**：文本与二进制消息、双向通信、关闭握手和取消。
+- **语言支持**：Python 同步/asyncio API 和类型声明；Node.js Promise、AbortSignal、CommonJS/ES modules 与 TypeScript 类型。
+- **预编译分发**：Python wheel；npm 主包自动选择对应平台的原生包。CI 检查安装、协议行为、二进制依赖、版本和工件哈希。
 
-> 🚀 Help me work seamlessly with open source sharing by [sponsoring me on GitHub](https://github.com/0x676e67/0x676e67/blob/main/SPONSOR.md)
+浏览器预设用于配置协议行为，不保证与真实浏览器所有行为完全一致，也不保证任意服务端都接受请求。
 
-An ergonomic and modular Rust HTTP Client for high-fidelity protocol matching, featuring customizable TLS, JA3/JA4, and HTTP/2 signature capabilities.
+## 支持平台
 
-## Features
+| 系统 | 架构 | 工件 |
+| --- | --- | --- |
+| Linux（glibc ≥ 2.28） | x64、ARM64 | manylinux wheel、GNU npm 原生包 |
+| Windows | x64 | wheel、MSVC npm 原生包 |
+| macOS | Intel、Apple Silicon | wheel、对应架构 npm 原生包 |
 
-- Plain bodies, JSON, urlencoded, multipart
-- HTTP Trailer
-- Cookie Store
-- Redirect Policy
-- Original Header
-- Rotating Proxies
-- Tower Middleware
-- WebSocket Upgrade
-- HTTPS via BoringSSL
-- HTTP/2 over TLS Parity
-- Certificate Store (CAs & mTLS)
-- Multiple Runtime (Tokio, Compio)
+当前完整 CI 覆盖常规 **CPython 3.10–3.14** 和 **Node.js 22/24**。macOS 扩展的构建部署目标为 11.0，但 Node.js 24 本身要求至少 macOS 13.5；最终运行要求还受 Python/Node.js 发行版本影响。Windows 可能需要 VC Runtime。
 
-## Example
+尚未提供 Alpine/musl、Windows ARM64、32 位、移动系统、PyPy 或 free-threaded Python 工件。上述构建与版本矩阵不等于最低系统版本和所有旧 CPU 都经过实机测试，详情见[平台支持](docs/platform-support.md)。
 
-The following example uses the [Tokio](https://tokio.rs) runtime with optional features enabled by adding this to your `Cargo.toml`:
+## 安装开发预览工件
 
-```toml
-[dependencies]
-tokio = { version = "1", features = ["full"] }
-wreq = "6.0.0-rc"
-wreq-util = "3.0.0-rc"
+### 1. 下载
+
+在 [Native packages 工作流](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml)中选择**全部作业成功**的运行，下载 `native-release` artifact，并解压到 `artifacts/`。
+
+其中包含五个 wheel、五个平台 npm 包、一个 npm 主包、五份平台审计报告及 `SHA256SUMS`。下载 Actions artifact 通常需要登录 GitHub；也可通过已登录的 GitHub CLI 下载：
+
+```sh
+# 将 RUN_ID 替换为所选成功运行的编号
+gh run download RUN_ID --repo heiqishi666/tlsurl --name native-release --dir artifacts
 ```
 
-And then the code:
+### 2. Python
 
-```rust
-use wreq::Client;
-use wreq_util::Emulation;
+建议先创建虚拟环境，再让 pip 从本地目录选择匹配的 wheel：
 
-#[tokio::main]
-async fn main() -> wreq::Result<()> {
-    // Build a client
-    let client = Client::builder()
-        .emulation(Emulation::Safari26)
-        .build()?;
+```sh
+python -m venv .venv
+# 激活环境：Windows PowerShell 使用 .\.venv\Scripts\Activate.ps1；macOS/Linux 使用 source .venv/bin/activate
+python -m pip install --no-index --only-binary=:all: --find-links ./artifacts tlsurl==0.1.0
+```
 
-    // Use the API you're already familiar with
-    let resp = client.get("https://pingly.us.kg/api/all").send().await?;
-    println!("{}", resp.text().await?);
-    Ok(())
+### 3. Node.js
+
+在你的 Node.js 项目中，同时安装主包和**一个与当前系统匹配的平台包**。例如 Windows x64：
+
+```sh
+npm install --ignore-scripts --registry=https://registry.npmjs.org ./artifacts/tlsurl-win32-x64-msvc-0.1.0.tgz ./artifacts/tlsurl-0.1.0.tgz
+```
+
+其他平台替换上面的平台包文件名：
+
+| 平台 | 平台包文件名 |
+| --- | --- |
+| Linux x64 | `tlsurl-linux-x64-gnu-0.1.0.tgz` |
+| Linux ARM64 | `tlsurl-linux-arm64-gnu-0.1.0.tgz` |
+| macOS Intel | `tlsurl-darwin-x64-0.1.0.tgz` |
+| macOS Apple Silicon | `tlsurl-darwin-arm64-0.1.0.tgz` |
+
+主包和平台包必须使用相同版本；如果下载的版本不同，请同步替换上述版本号。保留 npm optionalDependencies，不要使用 `--omit=optional`。
+
+## Python 快速开始
+
+### 同步请求
+
+```python
+from tlsurl import Client
+
+with Client(timeout_ms=10000) as client:
+    response = client.get("https://example.com", params=[("source", "tlsurl")])
+    response.raise_for_status()
+    print(response.status, response.http_version)
+    print(response.text())
+```
+
+### asyncio 请求
+
+```python
+import asyncio
+from tlsurl import AsyncClient
+
+async def main():
+    async with AsyncClient(timeout_ms=10000) as client:
+        response = await client.get("https://example.com")
+        response.raise_for_status()
+        print(response.text())
+
+asyncio.run(main())
+```
+
+发送 JSON 使用 `client.post(url, json={"name": "demo"})`，解析 JSON 响应使用 `response.json()`。非 JSON 响应会产生语言原生的解析异常。
+
+## Node.js 快速开始
+
+将以下内容保存为 `example.mjs`，运行 `node example.mjs`：
+
+```javascript
+import { Client } from 'tlsurl'
+
+const client = new Client({ timeoutMs: 10000 })
+try {
+  const response = await client.get('https://example.com', {
+    params: [['source', 'tlsurl']],
+  })
+  response.raiseForStatus()
+  console.log(response.status, response.httpVersion)
+  console.log(response.text())
+} finally {
+  client.close()
 }
 ```
 
-## Behavior
+CommonJS 可使用 `const { Client } = require('tlsurl')`。发送 JSON 使用 `client.post(url, { json: { name: 'demo' } })`。
 
-- **HTTP/1 over TLS**
+## 浏览器预设
 
-In the Rust ecosystem, most HTTP clients rely on the [http](https://github.com/hyperium/http) library, which performs well but does not preserve header case. This causes some **WAFs** to reject **HTTP/1** requests with lowercase headers (see [discussion](https://github.com/seanmonstar/reqwest/discussions/2227)). **wreq** addresses this by fully supporting **HTTP/1** header case sensitivity.
+```python
+from tlsurl import Client, available_profiles
 
-- **HTTP/2 over TLS**
-
-Due to the complexity of **TLS** encryption and the widespread adoption of **HTTP/2**, browser fingerprints such as **JA3**, **JA4**, and **Akamai** cannot be reliably emulated using simple fingerprint strings. Instead of parsing and emulating these string-based fingerprints, **wreq** provides fine-grained control over **TLS** and **HTTP/2** extensions and settings for precise browser behavior emulation.
-
-- **Device Emulation**
-
-**TLS** and **HTTP/2** fingerprints are often identical across various browser models because these underlying protocols evolve slower than browser release cycles. **100+ browser device emulation profiles** are maintained in [wreq-util](https://github.com/0x676e67/wreq-util).
-
-## Building
-
-Compiling alongside **openssl-sys** can cause symbol conflicts with **boringssl** that lead to [link failures](https://github.com/cloudflare/boring/issues/197), and on **Linux** and **Android** this can be avoided by enabling the **`prefix-symbols`** feature.
-
-Install [BoringSSL build dependencies](https://github.com/google/boringssl/blob/master/BUILDING.md#build-prerequisites) and build with:
-
-```bash
-sudo apt-get install build-essential cmake perl pkg-config libclang-dev musl-tools git -y
-cargo build --release
+print(available_profiles())
+with Client(profile="chrome_149", platform="windows") as client:
+    response = client.get("https://example.com")
+    print(response.status)
 ```
 
-This GitHub Actions [workflow](.github/compilation-guide/build.yml) can be used to compile the project on **Linux**, **Windows**, and **macOS**.
+Node.js 对应 `availableProfiles()` 和 `new Client({ profile: 'chrome_149', platform: 'windows' })`。这里的 `platform` 控制预设 Header，不是选择安装包架构；省略时采用上游默认 macos，与运行机器的系统无关。
 
-## Services
+## 流式下载与取消
 
-Help sustain the ongoing development of this open-source project by reaching out for [commercial support](mailto:gngppz@gmail.com). Receive private guidance, expert reviews, or direct access to the maintainer, with personalized technical assistance tailored to your needs.
+Python 使用上下文管理器确保提前退出时释放响应：
 
-## License
+```python
+from tlsurl import Client
 
-Licensed under either of Apache License, Version 2.0 ([LICENSE](./LICENSE) or http://www.apache.org/licenses/LICENSE-2.0).
+with Client() as client:
+    with client.stream("GET", "https://example.com") as response:
+        response.raise_for_status()
+        with open("page.html", "wb") as output:
+            for chunk in response:
+                output.write(chunk)
+```
 
-## Contribution
+Node.js 请求接受 `AbortSignal`：
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the [Apache-2.0](./LICENSE) license, shall be licensed as above, without any additional terms or conditions.
+```javascript
+import { Client } from 'tlsurl'
 
-## Sponsors
+const client = new Client()
+const controller = new AbortController()
+const timer = setTimeout(() => controller.abort(), 5000)
+try {
+  const response = await client.get('https://example.com', { signal: controller.signal })
+  console.log(response.status)
+} catch (error) {
+  console.error(error.code, error.message)
+} finally {
+  clearTimeout(timer)
+  client.close()
+}
+```
 
-<a href="https://captcha.fun/?utm_source=github&utm_medium=readme&utm_campaign=wreq" target="_blank"><img src="https://www.captcha.fun/banner.jpg" height="47" width="149"></a>
+文件上传使用 Python `body_file=path` / Node.js `bodyFile: path`，Multipart 文件项使用 `{name, file}`。流式迭代、异步下载和 WebSocket 完整示例见[API 文档](docs/native-bindings.md)。
 
-**Solve reCAPTCHA in less than 2 seconds**
+## 默认行为
 
-**[Captcha.fun](https://captcha.fun/?utm_source=github&utm_medium=readme&utm_campaign=wreq)** delivers fast, reliable CAPTCHA solving built for automation at scale.
+- TLS 证书校验默认开启；系统代理不会自动启用，代理必须显式指定。
+- 默认请求总超时 30 秒，缓冲响应上限 16 MiB；流式响应不受该累计大小上限约束，应用应按需要自行限制。
+- HTTP 4xx/5xx 正常返回响应；需要时调用 `raise_for_status()` / `raiseForStatus()`。
+- 重用 Client 可以复用连接池和 Cookie；用完显式关闭。关闭后拒绝新请求，已提交的请求可继续完成。
+- Python 网络错误为 `tlsurl.Error`，Node.js 为 `TlsurlError`，可读取 `code`，例如 `TIMEOUT`、`TLS`、`CONNECT`、`CANCELLED`。
 
-With simple API integration, consistent performance, and competitive pricing, it's an easy way to keep your workflows moving without delays—use code **`WREQ`** for **10% bonus credits**.
+## 开发、构建与更多文档
 
-**[Dashboard](https://dash.captcha.fun/)** | **[Docs](http://docs.captcha.fun/)** | **[Discord](https://discord.gg/captchafun)**
+构建者需要 Rust、C/C++ 工具链及 BoringSSL 构建依赖；使用预编译工件的调用方不需要安装 Rust。构建入口为 `python scripts/build_native.py`，环境准备及各平台限制见下方文档。
 
----
+- [完整 API 与构建说明](docs/native-bindings.md)
+- [平台支持与二进制审计](docs/platform-support.md)
+- [测试范围与持续负载验证](docs/validation.md)
+- [首发交付规格](docs/delivery-plan.md)
+- [发布流程与账号配置](docs/publishing.md)
+- [上游 wreq 原始说明](docs/upstream-wreq.md)
 
-<a href="https://hypersolutions.co/?utm_source=github&utm_medium=readme&utm_campaign=wreq" target="_blank"><img src="https://raw.githubusercontent.com/0x676e67/wreq/main/.github/assets/hypersolutions.jpg" height="47" width="149"></a>
+## 来源与许可证
 
-TLS fingerprinting alone isn't enough for modern bot protection. **[Hyper Solutions](https://hypersolutions.co?utm_source=github&utm_medium=readme&utm_campaign=wreq)** provides the missing piece - API endpoints that generate valid antibot tokens for:
+tlsurl 基于 wreq，并保留其源于 [reqwest](https://github.com/seanmonstar/reqwest) 的项目历史及原始声明。浏览器预设来自 wreq-util。上游 Rust crate 的能力不全部等同于 Python/Node.js 已公开的接口，绑定范围以本项目 API 文档为准。
 
-**Akamai** • **DataDome** • **Kasada** • **Incapsula**
-
-No browser automation. Just simple API calls that return the exact cookies and headers these systems require.
-
-**[Dashboard](https://hypersolutions.co?utm_source=github&utm_medium=readme&utm_campaign=wreq)** | **[Docs](https://docs.justhyped.dev)** | **[Discord](https://discord.gg/akamai)**
-
-## Accolades
-
-A hard fork of [reqwest](https://github.com/seanmonstar/reqwest).
+本项目采用 [Apache-2.0](LICENSE) 许可证。第三方组件保留各自条款，完整文本随安装包分发，也可查看[第三方许可证汇编](docs/THIRD_PARTY_LICENSES.txt)和[补充来源记录](docs/licenses/README.md)。
