@@ -9,7 +9,7 @@ tlsurl 基于 [wreq](https://github.com/penumbra-x/rquest) 的协议实现，通
 
 项目目标是让使用者安装对应平台的工件即可调用，无需自行编译 Rust 或 BoringSSL。协议能力集中在核心实现，两种语言保留各自常用的调用方式。
 
-> 当前为开发预览。**Python 0.1.0 已发布到 [PyPI](https://pypi.org/project/tlsurl/0.1.0/)**；npm 尚未发布，Node.js 请使用 GitHub Actions 工件，不要将 `npm install tlsurl` 当作当前可用入口。发布配置见[发布说明](docs/publishing.md)。
+> 当前为开发预览。**Python 0.1.0 已发布到 [PyPI](https://pypi.org/project/tlsurl/0.1.0/)**；npm 尚未发布，Node.js 请使用仓库 [bin/node/0.1.0](bin/node/0.1.0) 中的预编译包，不要将 `npm install tlsurl` 当作当前可用入口。发布配置见[发布说明](docs/publishing.md)。
 
 ## 功能
 
@@ -102,47 +102,38 @@ python -m pip install --only-binary=:all: --index-url https://pypi.org/simple tl
 
 安装后可直接使用上面的 Python 示例，无需编译 Rust。`--only-binary=:all:` 确保只安装预编译 wheel；若当前系统没有匹配工件，会直接报错。支持范围见上方平台表。
 
-## 下载 GitHub 工件（Node.js / Python 离线安装）
+## 安装 Node.js 预编译包
 
-### 1. 下载
+仓库已保存 [bin/node/0.1.0](bin/node/0.1.0) 预编译包，包含主包与五个平台包，不依赖 Actions 工件的过期时间。克隆仓库或下载仓库 ZIP 即可获取；也可以打开下面的文件链接，点击 **Download raw file** 下载主包与一个匹配的平台包。
 
-在 [Native packages 工作流](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml)中选择**全部作业成功**的运行，下载 `native-release` artifact，并解压到 `artifacts/`。
+主包：[tlsurl-0.1.0.tgz](bin/node/0.1.0/tlsurl-0.1.0.tgz)。
 
-其中包含五个 wheel、五个平台 npm 包、一个 npm 主包、五份平台审计报告及 `SHA256SUMS`。下载 Actions artifact 通常需要登录 GitHub；也可通过已登录的 GitHub CLI 下载：
+| 平台 | 原生包 |
+| --- | --- |
+| Windows x64 | [tlsurl-win32-x64-msvc-0.1.0.tgz](bin/node/0.1.0/tlsurl-win32-x64-msvc-0.1.0.tgz) |
+| Linux x64（glibc） | [tlsurl-linux-x64-gnu-0.1.0.tgz](bin/node/0.1.0/tlsurl-linux-x64-gnu-0.1.0.tgz) |
+| Linux ARM64（glibc） | [tlsurl-linux-arm64-gnu-0.1.0.tgz](bin/node/0.1.0/tlsurl-linux-arm64-gnu-0.1.0.tgz) |
+| macOS Intel | [tlsurl-darwin-x64-0.1.0.tgz](bin/node/0.1.0/tlsurl-darwin-x64-0.1.0.tgz) |
+| macOS Apple Silicon | [tlsurl-darwin-arm64-0.1.0.tgz](bin/node/0.1.0/tlsurl-darwin-arm64-0.1.0.tgz) |
+
+在你的 Node.js 项目中安装主包与匹配的平台包。例如将下载的两个文件放到项目 `artifacts/` 目录，Windows x64 执行：
 
 ```sh
-# 将 RUN_ID 替换为所选成功运行的编号
-gh run download RUN_ID --repo heiqishi666/tlsurl --name native-release --dir artifacts
+npm install --ignore-scripts ./artifacts/tlsurl-win32-x64-msvc-0.1.0.tgz ./artifacts/tlsurl-0.1.0.tgz
 ```
 
-### 2. Python
+如果已克隆仓库，把上面的 `./artifacts/` 换为仓库的 `bin/node/0.1.0/` 实际路径。其他平台替换对应的平台包名称即可。主包与平台包必须同版本；保留 npm optionalDependencies，不要使用 `--omit=optional`。安装不需要 npm 账号，也不需要本地编译 Rust。
 
-建议先创建虚拟环境，再让 pip 从本地目录选择匹配的 wheel：
+文件来自[已通过 31 项验收的构建](https://github.com/heiqishi666/tlsurl/actions/runs/34744491574)，未重新打包；可用 [SHA256SUMS](bin/node/0.1.0/SHA256SUMS) 校验完整性。
+
+## Python 离线工件与后续 CI 工件
+
+Python 常规安装使用上面的 PyPI 命令。离线 wheel 或后续尚未收录到 `bin/` 的版本，可从 [Native packages](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml) 中选择全部作业成功的运行，下载 `native-release`；Actions 下载通常需要登录 GitHub，且有保留期限。
 
 ```sh
-python -m venv .venv
-# 激活环境：Windows PowerShell 使用 .\.venv\Scripts\Activate.ps1；macOS/Linux 使用 source .venv/bin/activate
+gh run download RUN_ID --repo heiqishi666/tlsurl --name native-release --dir artifacts
 python -m pip install --no-index --only-binary=:all: --find-links ./artifacts tlsurl==0.1.0
 ```
-
-### 3. Node.js
-
-在你的 Node.js 项目中，同时安装主包和**一个与当前系统匹配的平台包**。例如 Windows x64：
-
-```sh
-npm install --ignore-scripts --registry=https://registry.npmjs.org ./artifacts/tlsurl-win32-x64-msvc-0.1.0.tgz ./artifacts/tlsurl-0.1.0.tgz
-```
-
-其他平台替换上面的平台包文件名：
-
-| 平台 | 平台包文件名 |
-| --- | --- |
-| Linux x64 | `tlsurl-linux-x64-gnu-0.1.0.tgz` |
-| Linux ARM64 | `tlsurl-linux-arm64-gnu-0.1.0.tgz` |
-| macOS Intel | `tlsurl-darwin-x64-0.1.0.tgz` |
-| macOS Apple Silicon | `tlsurl-darwin-arm64-0.1.0.tgz` |
-
-主包和平台包必须使用相同版本；如果下载的版本不同，请同步替换上述版本号。保留 npm optionalDependencies，不要使用 `--omit=optional`。
 
 ## Python 快速开始
 
