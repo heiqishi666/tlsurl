@@ -1,6 +1,6 @@
 # 预编译包发布
 
-入口为 `.github/workflows/publish-native.yml`，仅手动触发。默认 `publish=false`，只校验工件、PyPI已发布内容并执行npm dry-run；不会上传。普通push及上游release-plz不会触发这个发布入口。
+入口为 `.github/workflows/publish-native.yml`，仅手动触发。`registry` 可选 `pypi`（默认）、`npm` 或 `both`。默认 `publish=false`，校验工件及所选注册表；选择 npm 时另执行 npm dry-run，不会上传。普通push及上游release-plz不会触发这个发布入口。
 
 ## 选择候选
 
@@ -25,3 +25,12 @@ GitHub仓库为heiqishi666/tlsurl，工作流文件名为publish-native.yml，en
 发布中断后可重跑同一候选。npm比较注册表SHA-512，PyPI比较每个文件SHA-256；仅相同内容可跳过。冲突立即失败，不覆盖、不自动换版本、不撤回已有包。已发布部分保留并按相同候选补传。网络错误不会当作包不存在。
 
 正式上传后，工作流下载官方注册表中的11个压缩包核对候选哈希，并保存registry-verification.json。随后五个平台独立runner从PyPI/npm固定版本公开安装，Python禁止源码构建、npm禁用安装脚本，再执行基础请求、TLS、流式、上传和WebSocket测试（Python3.13/Node24）。候选构建CI另覆盖Python3.10–3.14与Node22/24。注册表一致性和公开安装均通过后才可标记本轮发布验收完成。
+
+
+## 仅发布 PyPI
+
+PyPI Pending Publisher 配置完成后，无需 npm 账号。运行入口选择 `registry=pypi`，先 `publish=false` 演练，通过后再用同一候选 `publish=true`。npm 发布、npm 注册表归档核验均跳过；只上传五个 wheel，并从 PyPI 下载核对字节。
+
+五个平台的公开安装测试从 PyPI 安装 Python 包；Node 测试伴随包来自该候选的已审计 GitHub 工件，以保留跨语言握手比较。此时不能把 Node 测试称为 npm 公开安装成功。`registry=npm` 时对称处理：Node 从 npm 安装，Python 测试伴随包来自 GitHub 工件；`both` 时两者均从官方注册表安装。
+
+Node 用户暂时按 README 下载 GitHub 工件安装，不需要 npm 账号。正式发布某一语言后，应分别更新其安装说明，不能将另一语言也标为已发布。
