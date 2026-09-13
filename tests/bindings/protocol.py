@@ -79,6 +79,8 @@ def main():
         threading.Thread(target=lambda: ready.put(server.stdout.readline()), daemon=True).start()
         ports = json.loads(ready.get(timeout=15))
         check(ports)
+        from random_tls import check as check_random_tls
+        check_random_tls(ports, args.node_module)
         subprocess.run([node_executable(), str(Path(__file__).with_name("protocol.cjs")),
                         str(Path(args.node_module).resolve()), json.dumps(ports)], check=True, timeout=60)
     finally:

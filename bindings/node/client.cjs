@@ -92,6 +92,7 @@ const clientKeys = {
   cookies: 'cookies', userAgent: 'user_agent', httpVersion: 'http_version',
   tls: 'tls', http2: 'http2', identity: 'identity',
   profile: 'profile', platform: 'platform', decompress: 'decompress',
+  randomTls: 'random_tls', randomTlsSeed: 'random_tls_seed',
 }
 const requestKeys = {
   timeoutMs: 'timeout_ms', maxRedirects: 'max_redirects',

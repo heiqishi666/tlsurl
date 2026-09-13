@@ -34,3 +34,8 @@ async def asynchronous(url: str) -> None:
         async with socket:
             await socket.send(b"hello")
             await socket.recv()
+
+
+def random_fingerprint() -> None:
+    with Client(random_tls=True, random_tls_seed=42):
+        pass

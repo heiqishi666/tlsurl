@@ -12,3 +12,8 @@ async function consumer(url: string): Promise<void> {
   client.close()
 }
 void consumer
+
+function randomFingerprint(): void {
+  new Client({ randomTls: true, randomTlsSeed: 42 }).close()
+}
+void randomFingerprint

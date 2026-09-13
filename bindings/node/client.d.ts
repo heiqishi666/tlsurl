@@ -12,6 +12,9 @@ export interface ClientOptions {
   userAgent?: string
   httpVersion?: 'auto' | '1.1' | '2'
   tls?: TlsOptions
+  randomTls?: boolean
+  /** Unsigned 32-bit seed; requires randomTls. */
+  randomTlsSeed?: number
   http2?: Http2Options
   identity?: {certificatePem: string; privateKeyPem: string}
   profile?: string

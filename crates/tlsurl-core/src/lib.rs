@@ -6,6 +6,7 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use wreq::cookie::IntoCookie;
 mod protocol;
+mod random_tls;
 pub mod stream;
 mod upload;
 pub mod websocket;
@@ -37,6 +38,8 @@ pub struct ClientOptions {
     pub user_agent: Option<String>,
     pub http_version: Option<String>,
     pub tls: Option<protocol::TlsConfig>,
+    pub random_tls: bool,
+    pub random_tls_seed: Option<u32>,
     pub http2: Option<protocol::Http2Config>,
     pub identity: Option<protocol::IdentityConfig>,
     pub profile: Option<wreq_util::Profile>,
@@ -157,6 +160,20 @@ impl Client {
         }
         let jar = Arc::new(wreq::cookie::Jar::default());
         let mut builder = wreq::Client::builder().no_proxy();
+        if options.random_tls {
+            if options.tls.is_some() || options.profile.is_some() || options.platform.is_some() {
+                return Err(Error {
+                    code: "INVALID_CONFIG",
+                    message: "random_tls cannot be combined with tls, profile or platform".into(),
+                });
+            }
+            builder = builder.tls_options(random_tls::options(options.random_tls_seed)?);
+        } else if options.random_tls_seed.is_some() {
+            return Err(Error {
+                code: "INVALID_CONFIG",
+                message: "random_tls_seed requires random_tls=true".into(),
+            });
+        }
         let mut profile_tls = None;
         let mut profile_http2 = None;
         if let Some(profile) = options.profile {
