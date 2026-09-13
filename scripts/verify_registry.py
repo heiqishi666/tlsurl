@@ -30,26 +30,29 @@ def check_download(url, local, allowed_host):
     return {"file": local.name, "sha256": expected, "bytes": size, "url": url}
 
 
-def check(directory, commit):
+def check(directory, commit, registry="both"):
+    if registry not in ("pypi", "npm", "both"):
+        raise ValueError("unknown registry")
     report = verify(directory, commit)
     results = []
-    for filename in report["npm"]:
+    for filename in report["npm"] if registry != "pypi" else []:
         archive = directory / filename
         manifest = json.loads(contents(archive)["package/package.json"])
         remote = remote_json(f"https://registry.npmjs.org/{quote(manifest['name'], safe='')}/{quote(report['version'], safe='')}")
         if remote is None:
             raise ValueError(f"npm package not publicly available: {manifest['name']}")
         results.append(check_download(remote["dist"]["tarball"], archive, "registry.npmjs.org"))
-    remote = remote_json(f"https://pypi.org/pypi/tlsurl/{quote(report['version'], safe='')}/json")
-    if remote is None:
-        raise ValueError("PyPI version not publicly available")
-    files = {item["filename"]: item for item in remote["urls"]}
-    wheels = list(directory.glob("*.whl"))
-    if set(files) != {wheel.name for wheel in wheels}:
-        raise ValueError("PyPI published wheel set differs from candidate")
-    for wheel in wheels:
-        results.append(check_download(files[wheel.name]["url"], wheel, "files.pythonhosted.org"))
-    return {"version": report["version"], "commit": commit, "files": results}
+    if registry != "npm":
+        remote = remote_json(f"https://pypi.org/pypi/tlsurl/{quote(report['version'], safe='')}/json")
+        if remote is None:
+            raise ValueError("PyPI version not publicly available")
+        files = {item["filename"]: item for item in remote["urls"]}
+        wheels = list(directory.glob("*.whl"))
+        if set(files) != {wheel.name for wheel in wheels}:
+            raise ValueError("PyPI published wheel set differs from candidate")
+        for wheel in wheels:
+            results.append(check_download(files[wheel.name]["url"], wheel, "files.pythonhosted.org"))
+    return {"version": report["version"], "commit": commit, "registry": registry, "files": results}
 
 
 if __name__ == "__main__":
@@ -57,8 +60,9 @@ if __name__ == "__main__":
     parser.add_argument("--directory", type=Path, required=True)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--registry", choices=["pypi", "npm", "both"], default="both")
     args = parser.parse_args()
-    result = check(args.directory, args.commit)
+    result = check(args.directory, args.commit, args.registry)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(f"Verified {len(result['files'])} public registry archives against candidate bytes")

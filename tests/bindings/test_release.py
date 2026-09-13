@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from prepare_release import prepare, verify
 from publish_packages import npm, pypi
 from test_audit import tar
-from verify_registry import check_download
+from verify_registry import check_download, check
 
 
 class ReleaseTests(unittest.TestCase):
@@ -73,6 +73,34 @@ class RegistryRetryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "published PyPI content differs"):
                     pypi(root, {"version": "0.1.0"}, root / "rejected")
                 self.assertFalse((root / "rejected").exists())
+
+
+class RegistrySelectionTests(unittest.TestCase):
+    def test_only_selected_registry_is_contacted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "one.whl").write_bytes(b"wheel")
+            tar(root / "main.tgz", {"package.json": {"name": "tlsurl"}})
+            report = {"version": "0.1.0", "npm": ["main.tgz"]}
+            def remote(url):
+                if "registry.npmjs.org" in url:
+                    return {"dist": {"tarball": "https://registry.npmjs.org/main.tgz"}}
+                return {"urls": [{"filename": "one.whl", "url": "https://files.pythonhosted.org/one.whl"}]}
+            for registry, count in [("pypi", 1), ("npm", 1), ("both", 2)]:
+                with self.subTest(registry=registry), patch("verify_registry.verify", return_value=report), \
+                        patch("verify_registry.remote_json", side_effect=remote) as fetch, \
+                        patch("verify_registry.check_download", return_value={}) as download:
+                    result = check(root, "a" * 40, registry)
+                    self.assertEqual(result["registry"], registry)
+                    self.assertEqual(len(result["files"]), count)
+                    self.assertEqual(download.call_count, count)
+                    urls = [call.args[0] for call in fetch.call_args_list]
+                    self.assertEqual(any("pypi.org" in url for url in urls), registry != "npm")
+                    self.assertEqual(any("registry.npmjs.org" in url for url in urls), registry != "pypi")
+            with patch("verify_registry.verify") as verify_bundle:
+                with self.assertRaisesRegex(ValueError, "unknown registry"):
+                    check(root, "a" * 40, "invalid")
+                verify_bundle.assert_not_called()
 
 
 class RegistryDownloadTests(unittest.TestCase):

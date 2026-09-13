@@ -7,8 +7,14 @@ on:
         description: Successful Native packages run for this exact main commit
         required: true
         type: string
+      registry:
+        description: Registry to publish and verify
+        required: true
+        default: pypi
+        type: choice
+        options: [pypi, npm, both]
       publish:
-        description: Publish to official registries (false performs validation and npm dry-run)
+        description: Publish to selected registry (false performs validation only)
         required: true
         default: false
         type: boolean
@@ -35,8 +41,16 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       BUILD_RUN: ${{ inputs.run_id }}
       SOURCE_COMMIT: ${{ github.sha }}
+      TARGET_REGISTRY: ${{ inputs.registry }}
       APPLY_PUBLISH: ${{ inputs.publish }}
     steps:
+      - name: Validate registry selection
+        shell: bash
+        run: |
+          case "$TARGET_REGISTRY" in
+            pypi|npm|both) ;;
+            *) echo 'Invalid registry selection' >&2; exit 1 ;;
+          esac
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -48,16 +62,19 @@ jobs:
       - name: Check release source and download verified artifacts
         run: python scripts/prepare_release.py --run-id "$BUILD_RUN" --commit "$SOURCE_COMMIT" --destination dist/release
       - name: Check wheel metadata
+        if: inputs.registry != 'npm'
         run: |
           python -m pip install twine==6.2.0
           python -m twine check --strict dist/release/*.whl
       - name: Prepare only unpublished PyPI wheels
         id: pypi
+        if: inputs.registry != 'npm'
         run: |
           python scripts/publish_packages.py --directory dist/release --commit "$SOURCE_COMMIT" --registry pypi --pending dist/pypi
           count=$(find dist/pypi -name '*.whl' | wc -l)
           echo "count=$count" >> "$GITHUB_OUTPUT"
       - name: Publish npm platform packages followed by main package
+        if: inputs.registry != 'pypi'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -66,13 +83,13 @@ jobs:
           if [[ "$APPLY_PUBLISH" == 'true' ]]; then args+=(--apply); fi
           python scripts/publish_packages.py --directory dist/release --commit "$SOURCE_COMMIT" --registry npm "${args[@]}"
       - name: Publish PyPI wheels with trusted publishing
-        if: inputs.publish && steps.pypi.outputs.count != '0'
+        if: inputs.publish && inputs.registry != 'npm' && steps.pypi.outputs.count != '0'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/pypi
       - name: Verify public registry archive bytes
         if: inputs.publish
-        run: python scripts/verify_registry.py --directory dist/release --commit "$SOURCE_COMMIT" --output dist/registry-verification.json
+        run: python scripts/verify_registry.py --directory dist/release --commit "$SOURCE_COMMIT" --registry "$TARGET_REGISTRY" --output dist/registry-verification.json
       - name: Preserve publication evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -85,7 +102,7 @@ jobs:
           if-no-files-found: ignore
 
   public-install:
-    name: Public install / ${{ matrix.runner }}
+    name: Public install / ${{ inputs.registry }} / ${{ matrix.runner }}
     needs: release
     if: inputs.publish
     runs-on: ${{ matrix.runner }}
@@ -94,6 +111,11 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm, windows-2022, macos-15-intel, macos-15]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN: ${{ inputs.run_id }}
+      SOURCE_COMMIT: ${{ github.sha }}
+      TARGET_REGISTRY: ${{ inputs.registry }}
     defaults:
       run:
         shell: bash
@@ -105,11 +127,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Install exact public version without source builds
+      - name: Download verified companion packages for cross-language tests
+        if: inputs.registry != 'both'
+        run: python scripts/prepare_release.py --run-id "$BUILD_RUN" --commit "$SOURCE_COMMIT" --destination dist/release
+      - name: Install selected public packages and unpublished test companions
         run: |
           version=$(python -c "import tomllib; print(tomllib.load(open('bindings/python/pyproject.toml','rb'))['project']['version'])")
-          python -m pip install --no-cache-dir --only-binary=:all: --index-url https://pypi.org/simple "tlsurl==$version"
-          npm install --prefix dist/public --ignore-scripts --no-audit --registry=https://registry.npmjs.org "tlsurl@$version"
+          if [[ "$TARGET_REGISTRY" != 'npm' ]]; then
+            python -m pip install --no-cache-dir --only-binary=:all: --index-url https://pypi.org/simple "tlsurl==$version"
+          else
+            python -m pip install --no-index --only-binary=:all: --find-links dist/release "tlsurl==$version"
+          fi
+          if [[ "$TARGET_REGISTRY" != 'pypi' ]]; then
+            npm install --prefix dist/public --ignore-scripts --no-audit --registry=https://registry.npmjs.org "tlsurl@$version"
+          else
+            python tests/bindings/install_npm.py --artifacts dist/release --consumer dist/public
+          fi
       - name: Exercise public packages
         run: |
           npm ci --prefix tests/bindings --ignore-scripts --omit=optional --no-audit --registry=https://registry.npmjs.org
