@@ -22,7 +22,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/heiqishi666/tlsurl.git",
+    "url": "git+https://github.com/knight-bili/tlsurl.git",
     "directory": "bindings/node/npm/linux-arm64-gnu"
   }
 }

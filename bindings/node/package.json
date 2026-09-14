@@ -46,11 +46,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/heiqishi666/tlsurl.git",
+    "url": "git+https://github.com/knight-bili/tlsurl.git",
     "directory": "bindings/node"
   },
-  "homepage": "https://github.com/heiqishi666/tlsurl",
+  "homepage": "https://github.com/knight-bili/tlsurl",
   "bugs": {
-    "url": "https://github.com/heiqishi666/tlsurl/issues"
+    "url": "https://github.com/knight-bili/tlsurl/issues"
   }
 }
