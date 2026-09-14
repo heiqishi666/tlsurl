@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/main' && github.repository == 'heiqishi666/tlsurl'
+    if: github.ref == 'refs/heads/main' && github.repository == 'knight-bili/tlsurl'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: native-release

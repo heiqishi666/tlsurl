@@ -10,7 +10,7 @@ import tempfile
 
 from collect_native import collect, contents
 
-REPOSITORY = "heiqishi666/tlsurl"
+REPOSITORY = "knight-bili/tlsurl"
 
 
 def api(path):

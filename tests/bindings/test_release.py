@@ -16,10 +16,26 @@ from verify_registry import check_download, check
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_accepts_current_repository_and_downloads_verified_build(self):
+        valid = {"status": "completed", "conclusion": "success", "head_sha": "a" * 40,
+                 "head_branch": "main", "event": "push", "path": ".github/workflows/native-packages.yml",
+                 "head_repository": {"full_name": "knight-bili/tlsurl"}}
+        jobs = {"total_count": 31, "jobs": [{"conclusion": "success"}] * 31}
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "release"
+            with patch("prepare_release.api", side_effect=[valid, jobs]), \
+                    patch("prepare_release.subprocess.run") as download, \
+                    patch("prepare_release.verify", return_value={"version": "0.1.0"}) as verify_bundle:
+                self.assertEqual(prepare("123", "a" * 40, destination), {"version": "0.1.0"})
+                download.assert_called_once_with(
+                    ["gh", "run", "download", "123", "--repo", "knight-bili/tlsurl",
+                     "--name", "native-release", "--dir", str(destination)], check=True)
+                verify_bundle.assert_called_once_with(destination, "a" * 40)
+
     def test_rejects_unapproved_run_before_download(self):
         valid = {"status": "completed", "conclusion": "success", "head_sha": "a" * 40,
                  "head_branch": "main", "event": "push", "path": ".github/workflows/native-packages.yml",
-                 "head_repository": {"full_name": "heiqishi666/tlsurl"}}
+                 "head_repository": {"full_name": "knight-bili/tlsurl"}}
         for change in [{"conclusion": "failure"}, {"status": "in_progress"}, {"head_sha": "b" * 40},
                        {"head_branch": "other"}, {"event": "pull_request"}, {"path": "other.yml"},
                        {"head_repository": {"full_name": "other/tlsurl"}}]:
