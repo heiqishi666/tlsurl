@@ -1,0 +1,161 @@
+name: Publish GitHub npm packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  packages: write
+
+concurrency:
+  group: tlsurl-github-packages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.repository == 'knight-bili/tlsurl'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: native-release
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://npm.pkg.github.com
+          scope: '@knight-bili'
+      - name: Download and verify accepted native build
+        run: python scripts/prepare_release.py --run-id 34814012776 --commit 15ea3660a9e598e1f93a0f7f819d68f032fc68ca --destination dist/github-source
+      - name: Prepare scoped packages from verified archives
+        run: |
+          python <<'PY'
+          import json, tarfile
+          from pathlib import Path
+          source = Path('dist/github-source')
+          stage = Path('dist/github-staging')
+          for archive in sorted(source.glob('*.tgz')):
+              directory = stage / archive.stem
+              directory.mkdir(parents=True)
+              with tarfile.open(archive) as package:
+                  package.extractall(directory, filter='data')
+              root = directory / 'package'
+              manifest = json.loads((root / 'package.json').read_text())
+              name = manifest['name']
+              if manifest['version'] != '0.1.0' or manifest['repository']['url'] != 'git+https://github.com/knight-bili/tlsurl.git':
+                  raise ValueError('Unexpected source package')
+              manifest['name'] = '@knight-bili/' + name
+              manifest['publishConfig'] = {'registry': 'https://npm.pkg.github.com'}
+              if name == 'tlsurl':
+                  manifest['optionalDependencies'] = {
+                      dependency: 'npm:@knight-bili/' + dependency + '@' + version
+                      for dependency, version in manifest['optionalDependencies'].items()
+                  }
+                  readme = (root / 'README.md').read_text()
+                  readme = readme.replace("from 'tlsurl'", "from '@knight-bili/tlsurl'").replace('npm install tlsurl', 'npm install @knight-bili/tlsurl')
+                  (root / 'README.md').write_text('# GitHub Packages distribution\n\nConfigure `@knight-bili:registry=https://npm.pkg.github.com` and authenticate to GitHub Packages before installation. All native platform packages are also hosted on GitHub Packages; npm aliases preserve the loader dependency names.\n\n' + readme)
+              (root / 'package.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+          mkdir -p dist/github-packages
+          for package in dist/github-staging/*/package; do
+            npm pack "./$package" --ignore-scripts --pack-destination dist/github-packages
+          done
+      - name: Publish platforms followed by main package
+        run: |
+          node <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const {execFileSync, spawnSync} = require('node:child_process');
+          const dir = 'dist/github-packages';
+          const main = 'knight-bili-tlsurl-0.1.0.tgz';
+          const files = fs.readdirSync(dir).filter(name => name.endsWith('.tgz')).sort();
+          if (files.length !== 6 || !files.includes(main)) throw new Error('Expected six packages');
+          const ordered = [...files.filter(name => name !== main), main];
+          const plans = ordered.map(file => {
+            const name = '@knight-bili/' + file.replace(/^knight-bili-/, '').replace(/-0\.1\.0\.tgz$/, '');
+            const integrity = 'sha512-' + crypto.createHash('sha512').update(fs.readFileSync(`${dir}/${file}`)).digest('base64');
+            const args = ['view', `${name}@0.1.0`, 'dist.integrity', '--json', '--registry=https://npm.pkg.github.com'];
+            const result = spawnSync('npm', args, {encoding:'utf8'});
+            let exists = false;
+            if (result.status === 0) {
+              if (JSON.parse(result.stdout) !== integrity) throw new Error(`Existing package content differs: ${name}`);
+              exists = true;
+            } else {
+              let error;
+              try {error = JSON.parse(result.stdout).error;} catch {throw new Error(`Registry lookup failed: ${name}`);}
+              if (error?.code !== 'E404') throw new Error(`Registry lookup failed: ${name}: ${error?.code}`);
+            }
+            return {file,name,version:'0.1.0',integrity,exists};
+          });
+          for (const item of plans) {
+            if (item.exists) {console.log(`Already published with identical bytes: ${item.name}`); continue;}
+            execFileSync('npm', ['publish', `${dir}/${item.file}`, '--ignore-scripts', '--access=public', '--registry=https://npm.pkg.github.com'], {stdio:'inherit'});
+          }
+          fs.writeFileSync(`${dir}/integrity.json`, JSON.stringify(plans,null,2)+'\n');
+          JS
+      - name: Verify published archive bytes and package metadata
+        run: |
+          mkdir -p dist/github-download
+          node <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const {execFileSync} = require('node:child_process');
+          const plans = JSON.parse(fs.readFileSync('dist/github-packages/integrity.json', 'utf8'));
+          for (const item of plans) {
+            execFileSync('npm', ['pack', `${item.name}@${item.version}`, '--ignore-scripts', '--registry=https://npm.pkg.github.com', '--pack-destination', 'dist/github-download'], {stdio:'inherit'});
+            const actual = 'sha512-' + crypto.createHash('sha512').update(fs.readFileSync(`dist/github-download/${item.file}`)).digest('base64');
+            if (actual !== item.integrity) throw new Error(`Downloaded bytes differ: ${item.name}`);
+          }
+          console.log('All six GitHub archive hashes matched');
+          JS
+          gh api 'users/knight-bili/packages?package_type=npm' --jq '[.[] | select(.repository.full_name == "knight-bili/tlsurl") | {name,visibility,html_url}]' > dist/github-packages/package-metadata.json
+      - name: Preserve package and verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-npm-packages
+          path: dist/github-packages/*
+          if-no-files-found: ignore
+
+  install:
+    needs: publish
+    name: GitHub install / ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, windows-2022, macos-15-intel, macos-15]
+    defaults:
+      run:
+        shell: bash
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://npm.pkg.github.com
+          scope: '@knight-bili'
+      - name: Install published packages
+        run: |
+          python -m pip install --only-binary=:all: --index-url https://pypi.org/simple tlsurl==0.1.0
+          npm install --prefix dist/github-consumer --ignore-scripts --no-audit --registry=https://registry.npmjs.org @knight-bili/tlsurl@0.1.0
+          npm ci --prefix tests/bindings --ignore-scripts --omit=optional --no-audit --registry=https://registry.npmjs.org
+      - name: Exercise GitHub native packages
+        run: |
+          python tests/bindings/smoke.py --node-module dist/github-consumer/node_modules/@knight-bili/tlsurl --https
+          python tests/bindings/protocol.py --node-module dist/github-consumer/node_modules/@knight-bili/tlsurl
+          python tests/bindings/stream.py --node-module dist/github-consumer/node_modules/@knight-bili/tlsurl
+          python tests/bindings/upload.py --node-module dist/github-consumer/node_modules/@knight-bili/tlsurl
+          python tests/bindings/websocket.py --node-module dist/github-consumer/node_modules/@knight-bili/tlsurl
