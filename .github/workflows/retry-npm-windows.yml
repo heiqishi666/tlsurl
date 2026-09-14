@@ -1,0 +1,65 @@
+name: Retry npm Windows 0.1.0
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: tlsurl-native-publication
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    if: github.ref == 'refs/heads/main' && github.repository == 'knight-bili/tlsurl'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: native-release
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Download original verified candidate
+        run: python scripts/prepare_release.py --run-id 34814012776 --commit 15ea3660a9e598e1f93a0f7f819d68f032fc68ca --destination dist/release
+      - name: Publish only original Windows package once
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          python <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, 'scripts')
+          from prepare_release import verify
+          from publish_packages import npm, remote_json
+          from verify_registry import check_download
+          directory = Path('dist/release')
+          report = verify(directory, '15ea3660a9e598e1f93a0f7f819d68f032fc68ca')
+          archive = 'tlsurl-win32-x64-msvc-0.1.0.tgz'
+          if report['version'] != '0.1.0' or archive not in report['npm']:
+              raise ValueError('Original Windows candidate missing')
+          report['npm'] = [archive]
+          npm(directory, report, apply=True)
+          metadata = remote_json('https://registry.npmjs.org/tlsurl-win32-x64-msvc/0.1.0')
+          if metadata is None:
+              raise ValueError('Published metadata not yet visible; inspect without republishing')
+          evidence = check_download(metadata['dist']['tarball'], directory / archive, 'registry.npmjs.org')
+          Path('dist/windows-publication.json').write_text(json.dumps(evidence, indent=2) + '\n')
+          PY
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-windows-publication
+          path: dist/windows-publication.json
+          if-no-files-found: ignore
