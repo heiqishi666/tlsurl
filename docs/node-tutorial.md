@@ -1,6 +1,6 @@
 # Node.js 使用教程
 
-适用于 `tlsurl 0.1.0`，Node.js 22/24。当前 npm 官方注册表未发布，使用仓库提供的 `.tgz` 预编译包。
+适用于 `tlsurl 0.1.0`，Node.js 22/24。当前 npm 官方主包尚未上传；使用 Release 的 `.tgz` 工件，或从 GitHub Packages 安装。
 
 [文档索引](README.md) · [返回项目首页](../README.md) · [Python 教程](python-tutorial.md) · [完整 API](native-bindings.md)
 
@@ -24,6 +24,10 @@
 <a id="install"></a>
 
 ## 安装与运行方式
+
+推荐从 [v0.1.0 Release](https://github.com/knight-bili/tlsurl/releases/tag/v0.1.0) 下载主包和对应平台包，再按下方命令安装。也可按 [GitHub Packages 说明](github-packages.md) 使用 `npm install tlsurl@npm:@knight-bili/tlsurl@0.1.0`，保持本教程的 `import ... from 'tlsurl'` 不变。
+
+以下仓库 bin 链接保留历史离线工件：
 
 从 [bin/node/0.1.0](../bin/node/0.1.0) 下载主包 `tlsurl-0.1.0.tgz` 和匹配的平台包，放进自己的 Node 项目 `artifacts/` 目录。例如 Windows x64：
 

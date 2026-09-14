@@ -4,11 +4,11 @@
 
 ## 第一次使用
 
-1. **选择语言并安装**：[Python 从 PyPI 安装](python-tutorial.md#install)；[Node 从仓库 bin 安装](node-tutorial.md#install)。
+1. **选择语言并安装**：[Python 从 PyPI 安装](python-tutorial.md#install)；[Node 从 Release 或 GitHub Packages 安装](node-tutorial.md#install)。
 2. **跑通一个 GET**：[Python](python-tutorial.md#simple) / [Node](node-tutorial.md#simple)。
 3. **按场景加配置**：下面的表格直达代码示例；登录后连续请求先看「会话和 Cookie」，指纹配置看「TLS 指纹」。
 
-Python 0.1.0 已发布 PyPI；Node 0.1.0 使用 [bin/node/0.1.0](../bin/node/0.1.0) 的主包与匹配平台包，不是直接 `npm install tlsurl`。两个教程均基于当前 0.1.0 API。
+Python 0.1.0 已发布 PyPI；Node 0.1.0 可从 [Release](https://github.com/knight-bili/tlsurl/releases/tag/v0.1.0) 离线安装，或使用 [GitHub Packages](github-packages.md)。npm 官方主包尚未上传，不能直接 `npm install tlsurl`。两个教程均基于当前 0.1.0 API。
 
 ## 按场景查教程
 
@@ -57,6 +57,7 @@ Python 0.1.0 已发布 PyPI；Node 0.1.0 使用 [bin/node/0.1.0](../bin/node/0.1
 | [原生绑定 API](native-bindings.md) | 完整配置范围、生命周期、HTTP/2、mTLS、流式与 WebSocket |
 | [平台支持](platform-support.md) | Linux glibc、Windows/macOS 架构和运行时要求 |
 | [验证范围](validation.md) | 已验证内容与测试边界 |
+| [GitHub Packages](github-packages.md) | 作用域包安装、认证及 npm 别名 |
 | [发布说明](publishing.md) | PyPI/npm 单独发布、可信发布配置与发布记录 |
 | [Node 二进制包](../bin/node/0.1.0/README.md) | 获取原始 tgz、来源提交和 SHA-256 清单 |
 | [交付规格](delivery-plan.md) | 项目交付范围及历史实施计划 |

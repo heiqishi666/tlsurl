@@ -1,7 +1,7 @@
 # tlsurl 原生绑定
 
 基于上游 wreq 提交 `12ccf64bb00e79db6eabd4bc3ccf82871d3eb5a5`。
-保留根 crate 名称和 API，新增共享核心及两种语言绑定。Python 0.1.0 已发布 PyPI；Node 从仓库 bin 目录分发，npm 尚未发布。
+保留根 crate 名称和 API，新增共享核心及两种语言绑定。Python 0.1.0 已发布 PyPI；Node 已发布到 GitHub Packages，并提供 Release 离线工件；npm 官方主包尚未上传，详见 [安装说明](github-packages.md)。
 
 入门请先看 [文档索引](README.md)、[Python 教程](python-tutorial.md) 或 [Node.js 教程](node-tutorial.md)，本文侧重 API 边界和实现说明。
 

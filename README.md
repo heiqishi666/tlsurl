@@ -1,6 +1,6 @@
 # tlsurl
 
-[![Native packages](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml/badge.svg)](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml)
+[![Native packages](https://github.com/knight-bili/tlsurl/actions/workflows/native-packages.yml/badge.svg)](https://github.com/knight-bili/tlsurl/actions/workflows/native-packages.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 **支持自定义 TLS 指纹与一键随机 JA3 / JA4 的 Rust HTTP 客户端，提供 Python 和 Node.js 跨平台预编译包。**
@@ -9,7 +9,7 @@ tlsurl 基于 [wreq](https://github.com/penumbra-x/rquest) 的协议实现，通
 
 项目目标是让使用者安装对应平台的工件即可调用，无需自行编译 Rust 或 BoringSSL。协议能力集中在核心实现，两种语言保留各自常用的调用方式。
 
-> 当前为开发预览。**Python 0.1.0 已发布到 [PyPI](https://pypi.org/project/tlsurl/0.1.0/)**；npm 尚未发布，Node.js 请使用仓库 [bin/node/0.1.0](bin/node/0.1.0) 中的预编译包，不要将 `npm install tlsurl` 当作当前可用入口。发布配置见[发布说明](docs/publishing.md)。
+> 当前为开发预览。**Python 0.1.0 已发布到 [PyPI](https://pypi.org/project/tlsurl/0.1.0/)**；Node.js 已发布到 [GitHub Packages](https://github.com/users/knight-bili/packages/npm/package/tlsurl)，也可下载 [v0.1.0 Release](https://github.com/knight-bili/tlsurl/releases/tag/v0.1.0) 离线安装。npm 官方注册表已上传四个平台包，Windows 包因名称误判被拦截、主包尚未上传，`npm install tlsurl` 暂不可用。发布配置见[发布说明](docs/publishing.md)。
 
 ## 教程与文档
 
@@ -115,6 +115,10 @@ python -m pip install --only-binary=:all: --index-url https://pypi.org/simple tl
 
 ## 安装 Node.js 预编译包
 
+优先从 [v0.1.0 Release](https://github.com/knight-bili/tlsurl/releases/tag/v0.1.0) 下载主包和对应平台包，按下方命令安装；附件附带 SHA256SUMS。也可使用 [GitHub Packages 安装说明](docs/github-packages.md)，六个作用域包已通过五平台安装测试。
+
+仓库 `bin/node/0.1.0` 保留此前构建的离线工件，以下链接仍可使用；其归档哈希与本次 Release 不同。
+
 仓库已保存 [bin/node/0.1.0](bin/node/0.1.0) 预编译包，包含主包与五个平台包，不依赖 Actions 工件的过期时间。克隆仓库或下载仓库 ZIP 即可获取；也可以打开下面的文件链接，点击 **Download raw file** 下载主包与一个匹配的平台包。
 
 主包：[tlsurl-0.1.0.tgz](bin/node/0.1.0/tlsurl-0.1.0.tgz)。
@@ -135,14 +139,14 @@ npm install --ignore-scripts ./artifacts/tlsurl-win32-x64-msvc-0.1.0.tgz ./artif
 
 如果已克隆仓库，把上面的 `./artifacts/` 换为仓库的 `bin/node/0.1.0/` 实际路径。其他平台替换对应的平台包名称即可。主包与平台包必须同版本；保留 npm optionalDependencies，不要使用 `--omit=optional`。安装不需要 npm 账号，也不需要本地编译 Rust。
 
-文件来自[已通过 31 项验收的构建](https://github.com/heiqishi666/tlsurl/actions/runs/34744491574)，未重新打包；可用 [SHA256SUMS](bin/node/0.1.0/SHA256SUMS) 校验完整性。
+文件来自[已通过 31 项验收的构建](https://github.com/knight-bili/tlsurl/actions/runs/34744491574)，未重新打包；可用 [SHA256SUMS](bin/node/0.1.0/SHA256SUMS) 校验完整性。
 
 ## Python 离线工件与后续 CI 工件
 
-Python 常规安装使用上面的 PyPI 命令。离线 wheel 或后续尚未收录到 `bin/` 的版本，可从 [Native packages](https://github.com/heiqishi666/tlsurl/actions/workflows/native-packages.yml) 中选择全部作业成功的运行，下载 `native-release`；Actions 下载通常需要登录 GitHub，且有保留期限。
+Python 常规安装使用上面的 PyPI 命令。离线 wheel 或后续尚未收录到 `bin/` 的版本，可从 [Native packages](https://github.com/knight-bili/tlsurl/actions/workflows/native-packages.yml) 中选择全部作业成功的运行，下载 `native-release`；Actions 下载通常需要登录 GitHub，且有保留期限。
 
 ```sh
-gh run download RUN_ID --repo heiqishi666/tlsurl --name native-release --dir artifacts
+gh run download RUN_ID --repo knight-bili/tlsurl --name native-release --dir artifacts
 python -m pip install --no-index --only-binary=:all: --find-links ./artifacts tlsurl==0.1.0
 ```
 
